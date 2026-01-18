@@ -2,6 +2,8 @@
 
 This guide will help you get the GMS Report application code from this pull request into your local VS Code environment.
 
+> **⚠️ IMPORTANT**: All the application code is in the `copilot/build-gms-report-application` branch, NOT the `main` branch. After cloning, you MUST checkout this branch to see the code. See [Option 1](#option-1-clone-the-repository-and-checkout-the-pr-branch-recommended) below for step-by-step instructions.
+
 ## Option 1: Clone the Repository and Checkout the PR Branch (Recommended)
 
 This is the easiest way if you haven't cloned the repository yet.
@@ -23,17 +25,25 @@ cd gms-report
 
 ### Step 2: Checkout the Pull Request Branch
 
+**CRITICAL STEP**: The code is NOT in the main branch. You must checkout the PR branch:
+
 ```bash
 # Fetch all branches
 git fetch origin
 
-# Checkout the PR branch
+# Checkout the PR branch (this is where ALL the code is!)
 git checkout copilot/build-gms-report-application
 
 # Verify you're on the correct branch
 git branch
 # Should show: * copilot/build-gms-report-application
+
+# Verify you have the code - you should see many files
+ls -la
+# Should show: src/, prisma/, package.json, TESTING.md, etc.
 ```
+
+If you only see a README.md file, you're still on the main branch. Make sure to run the commands above.
 
 ### Step 3: Open in VS Code
 
@@ -293,6 +303,32 @@ git push origin copilot/build-gms-report-application
 ---
 
 ## Troubleshooting
+
+### Repository appears empty after cloning
+
+**Problem**: After running `git clone`, you only see a README.md file and none of the application code.
+
+**Solution**: The code is in the PR branch, not the main branch. You need to checkout the PR branch:
+
+```bash
+cd gms-report
+
+# Fetch all branches from GitHub
+git fetch origin
+
+# Checkout the PR branch with all the code
+git checkout copilot/build-gms-report-application
+
+# Verify you're on the correct branch (should show *)
+git branch
+
+# List files - you should now see all the code
+ls -la
+```
+
+You should now see folders like `src/`, `prisma/`, and files like `package.json`, `TESTING.md`, etc.
+
+**Why this happens**: When you clone a repository, Git defaults to the `main` branch. This project's code is in a pull request branch called `copilot/build-gms-report-application`, so you need to switch to that branch to see all the files.
 
 ### "code" command not found
 
