@@ -18,13 +18,14 @@ interface TrendsChartProps {
     name: string;
     color: string;
   }[];
+  title?: string;
 }
 
-export default function TrendsChart({ data, dataKeys }: TrendsChartProps) {
+export default function TrendsChart({ data, dataKeys, title = "Trends Over Time" }: TrendsChartProps) {
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
       <h3 className="text-lg font-semibold text-gray-900 mb-4">
-        Trends Over Time
+        {title}
       </h3>
       <ResponsiveContainer width="100%" height={300}>
         <LineChart data={data}>

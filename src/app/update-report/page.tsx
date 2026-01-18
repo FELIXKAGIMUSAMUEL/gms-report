@@ -96,13 +96,23 @@ export default function UpdateReportPage() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
+    
+    // Define which fields are integers vs floats
+    const integerFields = ["year", "quarter", "baptisms", "professionOfFaith", "membership", "sabbathSchoolAttendance"];
+    const floatFields = ["tithes", "combinedOfferings"];
+    
+    let parsedValue: number;
+    if (integerFields.includes(name)) {
+      parsedValue = parseInt(value) || 0;
+    } else if (floatFields.includes(name)) {
+      parsedValue = parseFloat(value) || 0;
+    } else {
+      parsedValue = 0;
+    }
+    
     setFormData((prev) => ({
       ...prev,
-      [name]: name === "year" || name === "quarter" || name === "baptisms" || 
-               name === "professionOfFaith" || name === "membership" || 
-               name === "sabbathSchoolAttendance"
-        ? parseInt(value) || 0
-        : parseFloat(value) || 0,
+      [name]: parsedValue,
     }));
   };
 
