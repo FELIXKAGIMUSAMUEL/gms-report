@@ -29,6 +29,22 @@ Before you begin, ensure you have the following installed:
 - PostgreSQL 12.x or later
 - npm or yarn package manager
 
+## Getting Started with VS Code
+
+**New to this project?** See [VSCODE_SETUP.md](VSCODE_SETUP.md) for detailed instructions on:
+- How to clone this repository and checkout the pull request branch
+- Setting up the project in VS Code
+- Installing recommended VS Code extensions
+- Troubleshooting common setup issues
+
+Quick start:
+```bash
+git clone https://github.com/mayegamustafa/gms-report.git
+cd gms-report
+git checkout copilot/build-gms-report-application
+code .  # Opens in VS Code
+```
+
 ## Installation
 
 1. **Clone the repository**
