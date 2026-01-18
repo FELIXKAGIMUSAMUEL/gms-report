@@ -112,6 +112,22 @@ After seeding the database, you can log in with:
 
 **⚠️ Important**: Change these credentials in production!
 
+## Testing the Application
+
+For a comprehensive testing guide, see [TESTING.md](TESTING.md) which includes:
+- Step-by-step setup verification
+- Manual testing checklist for all features
+- API endpoint testing
+- Responsive design testing
+- Common issues and troubleshooting
+- Success criteria checklist
+
+Quick test:
+1. Run `npm run dev`
+2. Open http://localhost:3000
+3. Login with `admin@gms.com` / `admin123`
+4. Verify dashboard loads with KPIs, charts, and data table
+
 ## Project Structure
 
 ```
