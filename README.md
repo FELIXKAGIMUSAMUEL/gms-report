@@ -13,7 +13,7 @@ A comprehensive web application for managing and visualizing mission statistics 
 
 ## Tech Stack
 
-- **Framework**: Next.js 14 (App Router)
+- **Framework**: Next.js 14.2.35 (App Router) - Latest security patches applied
 - **Language**: TypeScript
 - **Database**: PostgreSQL with Prisma ORM
 - **Authentication**: NextAuth.js
