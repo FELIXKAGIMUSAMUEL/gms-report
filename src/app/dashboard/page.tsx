@@ -73,7 +73,7 @@ export default function DashboardPage() {
   const previousReport = reports[1];
 
   const calculateTrend = (current: number, previous: number) => {
-    if (!previous) return null;
+    if (!previous) return undefined;
     const change = ((current - previous) / previous) * 100;
     return {
       value: Math.abs(Math.round(change)),
