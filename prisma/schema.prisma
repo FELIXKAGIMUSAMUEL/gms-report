@@ -10,28 +10,356 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  password  String
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+enum UserRole {
+  GM
+  TRUSTEE
 }
 
-model Report {
-  id                      String   @id @default(cuid())
-  year                    Int
-  quarter                 Int
-  baptisms                Int      @default(0)
-  professionOfFaith       Int      @default(0)
-  tithes                  Float    @default(0)
-  combinedOfferings       Float    @default(0)
-  membership              Int      @default(0)
-  sabbathSchoolAttendance Int      @default(0)
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
+enum IssueStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
 
-  @@unique([year, quarter])
-  @@index([year, quarter])
+enum ItemStatus {
+  ACTIVE
+  COMPLETED
+}
+
+enum ReactionType {
+  THUMBS_UP
+  THUMBS_DOWN
+  COMMENT
+}
+
+enum NotificationType {
+  MESSAGE
+  REPORT_PUBLISHED
+  REPORT_COMMENT
+  REACTION
+  SYSTEM
+}
+
+model User {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  password  String
+  name      String
+  role      UserRole   @default(GM)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  reactions Reaction[]
+  sentMessages Message[] @relation("SentMessages")
+  receivedMessages Message[] @relation("ReceivedMessages")
+  notifications Notification[]
+  todos     Todo[]
+}
+
+// Weekly Report Snapshot - stores complete weekly data
+model WeeklyReport {
+  id                  String   @id @default(cuid())
+  weekNumber          Int      // ISO week number
+  year                Int
+  term                Int      @default(1)
+  weekStartDate       DateTime
+  weekEndDate         DateTime
+  publishedAt         DateTime?
+  isDraft             Boolean  @default(true)
+  
+  // KPI Data
+  feesCollectionPercent     Float @default(0)
+  schoolsExpenditurePercent Float @default(0)
+  infrastructurePercent     Float @default(0)
+  totalEnrollment           Int   @default(0)
+  theologyEnrollment        Int   @default(0)
+  p7PrepExamsPercent        Float @default(0)
+  syllabusCoveragePercent   Float @default(0)
+  admissions                Int   @default(0)
+  
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  reactions Reaction[]
+
+    @@unique([weekNumber, year, term])
+    @@index([year, term, weekNumber])
+  @@index([publishedAt])
+}
+
+// Reactions and Comments from Trustees
+model Reaction {
+  id            String       @id @default(cuid())
+  type          ReactionType
+  comment       String?
+  sectionId     String       // Which card/section (e.g., "fees-collection", "enrollment", etc.)
+  
+  weeklyReportId String?
+  weeklyReport   WeeklyReport? @relation(fields: [weeklyReportId], references: [id], onDelete: Cascade)
+  
+  userId        String
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt     DateTime     @default(now())
+  
+  @@index([weeklyReportId])
+  @@index([sectionId])
+}
+
+// KPI Data - stores monthly/periodic KPI values
+model KPIData {
+  id                        String   @id @default(cuid())
+  month                     Int      // 1-12
+  year                      Int
+  feesCollectionPercent     Float    @default(0)
+  schoolsExpenditurePercent Float    @default(0)
+  infrastructurePercent     Float    @default(0)
+  totalEnrollment           Int      @default(0)
+  theologyEnrollment        Int      @default(0)
+  p7PrepExamsPercent        Float    @default(0)
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  @@unique([month, year])
+  @@index([year, month])
+}
+
+// Enrollment data for trend charts
+model Enrollment {
+  id        String   @id @default(cuid())
+  school    String   // School name
+  class     String   // KG1, KG2, KG3, P.1-P.7
+  term      Int      // 1, 2, 3
+  year      Int
+  count     Int      @default(0) // Number of students enrolled
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([school, class, term, year])
+  @@index([school])
+  @@index([year, term])
+  @@index([school, year, term])
+}
+
+// Income Source Master List
+model IncomeSource {
+  id        String   @id @default(cuid())
+  name      String   @unique  // e.g., "Swimming", "Uniforms", "Canteen"
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+}
+
+// Other Income sources - dynamic income tracking
+model OtherIncome {
+  id            String   @id @default(cuid())
+  source        String   // e.g., "Swimming", "Uniforms", "Canteen", "Saving Scheme"
+  percentage    Float    @default(0) // Percentage contribution (0-100)
+  year          Int
+  month         Int      @default(1)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([year, month])
+  @@index([source])
+}
+
+// P.7 Preparation Exam Performance
+model P7PrepPerformance {
+  id           String   @id @default(cuid())
+  year         Int
+  p6Promotion  Float    @default(0)  // P.6 to P.7 promotion rate
+  prep1        Float    @default(0)
+  prep2        Float    @default(0)
+  prep3        Float    @default(0)
+  prep4        Float    @default(0)
+  prep5        Float    @default(0)
+  prep6        Float    @default(0)
+  prep7        Float    @default(0)
+  prep8        Float    @default(0)
+  prep9        Float    @default(0)
+  ple          Float    @default(0)   // Primary Leaving Exam performance
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([year])
+  @@index([year])
+}
+
+// Upcoming Events
+model UpcomingEvent {
+  id        String   @id @default(cuid())
+  date      DateTime
+  activity  String
+  inCharge  String
+  rate      String?  // Rating or priority
+  status    ItemStatus @default(ACTIVE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([date])
+  @@index([status])
+}
+
+// GM Projects
+model GMProject {
+  id             String   @id @default(cuid())
+  projectName    String
+  progress       Float    @default(0) // 0-100
+  projectManager String
+  status         ItemStatus @default(ACTIVE)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([status])
+}
+
+// Weekly School Scorecard
+model WeeklyScorecard {
+  id               String   @id @default(cuid())
+  week             Int      // Week number
+  year             Int
+  term             Int      @default(1)
+  school           String
+  academicPercent  Float    @default(0)
+  financePercent   Float    @default(0)
+  qualityPercent   Float    @default(0)
+  tdpPercent       Float    @default(0)
+  theologyPercent  Float    @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([week, year, term, school])
+  @@index([year, term, week])
+}
+
+// Red Issues Tracker
+model RedIssue {
+  id        String      @id @default(cuid())
+  issue     String
+  inCharge  String
+  status    IssueStatus @default(OPEN)
+  itemStatus ItemStatus @default(ACTIVE)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([itemStatus])
+
+  @@index([status])
+}
+
+// School Master Data
+model School {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+}
+
+// Department Master Data
+model Department {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+}
+
+// Theology Enrollment by School, Class, Term, Year
+model TheologyEnrollment {
+  id        String   @id @default(cuid())
+  school    String   // School name
+  class     String   // KG1, KG2, KG3, P.1-P.7
+  term      Int      // 1, 2, 3
+  year      Int
+  count     Int      @default(0) // Number of students enrolled
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([school, class, term, year])
+  @@index([school])
+  @@index([year, term])
+  @@index([school, year, term])
+}
+
+// Messages between GM and Trustees
+model Message {
+  id        String   @id @default(cuid())
+  content   String   @db.Text
+  senderId  String
+  sender    User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  recipientId String
+  recipient User     @relation("ReceivedMessages", fields: [recipientId], references: [id], onDelete: Cascade)
+  isRead    Boolean  @default(false)
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([senderId])
+  @@index([recipientId])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+// Notifications
+model Notification {
+  id        String   @id @default(cuid())
+  type      NotificationType
+  title     String
+  message   String   @db.Text
+  data      String?  @db.Text // JSON data for additional context
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isRead    Boolean  @default(false)
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([type])
+  @@index([createdAt])
+}
+
+// User Todo/Program Reminders
+model Todo {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String   // e.g., "Board Meeting", "Staff Training"
+  description String?  @db.Text
+  dueDate     DateTime // Date and time of the program/event
+  isCompleted Boolean  @default(false)
+  completedAt DateTime?
+  isDeferred  Boolean  @default(false)
+  deferredUntil DateTime? // When to show it again if deferred
+  priority    String   @default("MEDIUM") // HIGH, MEDIUM, LOW
+  category    String   @default("GENERAL") // MEETING, TRAINING, EVENT, DEADLINE, OTHER
+  reminderSent Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+  @@index([isCompleted])
+  @@index([dueDate])
+  @@index([isDeferred])
+}
+
+// Term Settings - Configure academic term dates
+model TermSetting {
+  id          String   @id @default(cuid())
+  term        Int      // 1, 2, or 3
+  year        Int
+  startDate   DateTime // When Week 1 starts for this term
+  endDate     DateTime // When this term ends
+  weeksCount  Int      @default(13) // Number of weeks in the term
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([term, year])
+  @@index([year, term])
+  @@index([startDate])
 }

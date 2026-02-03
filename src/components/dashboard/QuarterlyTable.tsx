@@ -62,10 +62,10 @@ export default function QuarterlyTable({ reports }: QuarterlyTableProps) {
                   {report.professionOfFaith}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  ${report.tithes.toFixed(2)}
+                  UGX {report.tithes.toLocaleString("en-UG")}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  ${report.combinedOfferings.toFixed(2)}
+                  UGX {report.combinedOfferings.toLocaleString("en-UG")}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {report.membership}

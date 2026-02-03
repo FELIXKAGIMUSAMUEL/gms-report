@@ -3,8 +3,21 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "GMS Report - Global Mission Statistics",
+  title: "General Managers Report",
   description: "Manage and visualize mission statistics including baptisms, tithes, membership, and more.",
+  manifest: "/manifest.json",
+  themeColor: "#3b82f6",
+  viewport: {
+    width: "device-width",
+    initialScale: 1,
+    maximumScale: 1,
+    userScalable: false,
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "GMS Report",
+  },
 };
 
 export default function RootLayout({

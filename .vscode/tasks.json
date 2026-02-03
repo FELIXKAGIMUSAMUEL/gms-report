@@ -1,0 +1,10 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Patch dashboard for issue timelines and project filters",
+			"type": "shell",
+			"command": "true"
+		}
+	]
+}

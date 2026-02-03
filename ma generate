@@ -1,0 +1,16 @@
+                              Table "public.OtherIncome"
+  Column   |              Type              | Collation | Nullable |      Default      
+-----------+--------------------------------+-----------+----------+-------------------
+ id        | text                           |           | not null | 
+ year      | integer                        |           | not null | 
+ createdAt | timestamp(3) without time zone |           | not null | CURRENT_TIMESTAMP
+ updatedAt | timestamp(3) without time zone |           | not null | 
+ source    | text                           |           | not null | 
+ amount    | double precision               |           | not null | 0
+ month     | integer                        |           | not null | 1
+Indexes:
+    "OtherIncome_pkey" PRIMARY KEY, btree (id)
+    "OtherIncome_source_idx" btree (source)
+    "OtherIncome_year_key" UNIQUE, btree (year)
+    "OtherIncome_year_month_idx" btree (year, month)
+

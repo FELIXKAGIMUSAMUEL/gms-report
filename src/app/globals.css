@@ -25,3 +25,369 @@ body {
     text-wrap: balance;
   }
 }
+
+/* Print Styles for Dashboard */
+@media print {
+  /* Hide ALL navigation and sidebar elements */
+  nav {
+    display: none !important;
+  }
+
+  /* Hide sidebar div - be very specific */
+  div.hidden.md\:flex,
+  div[class*="md:flex"][class*="md:flex-shrink-0"],
+  div.w-64 {
+    display: none !important;
+    visibility: hidden !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+
+  /* Hide buttons and controls */
+  button,
+  .no-print,
+  [class*="KPI"] {
+    display: none !important;
+  }
+
+  /* Hide all navigation-related divs */
+  aside,
+  nav,
+  [role="navigation"] {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* Main layout container */
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    color: black !important;
+  }
+
+  /* The outer flex container */
+  .h-screen.flex.flex-col {
+    height: auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  /* Hide overflow properties that might hide content */
+  .overflow-hidden {
+    overflow: visible !important;
+  }
+
+  /* Main content area - force full width */
+  .flex-1.overflow-auto {
+    width: 100% !important;
+    flex: 1 !important;
+    overflow: visible !important;
+  }
+
+  /* Main element */
+  main {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 20px !important;
+    display: block !important;
+  }
+
+  /* Grid layouts - desktop view */
+  .grid {
+    display: grid !important;
+    width: 100% !important;
+  }
+
+  /* Force 3-column for KPIs */
+  .grid-cols-1.md\:grid-cols-2.xl\:grid-cols-3 {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+
+  /* Generic grid overrides */
+  .grid-cols-1 {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+
+  .md\:grid-cols-2 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .lg\:grid-cols-2 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .xl\:grid-cols-3 {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+
+  /* KPI Cards */
+  [class*="grid"] > div {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Charts and graphs */
+  .recharts-wrapper {
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 300px !important;
+    page-break-inside: avoid !important;
+  }
+
+  svg {
+    page-break-inside: avoid !important;
+  }
+
+  /* Card styling */
+  .bg-white {
+    background: white !important;
+    border: 1px solid #ddd !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Flex and layout */
+  .flex {
+    display: flex !important;
+  }
+
+  .flex-col {
+    flex-direction: column !important;
+  }
+
+  /* Spacing */
+  .mb-8,
+  .mb-10,
+  .mb-6,
+  .mb-4,
+  .gap-6,
+  .gap-8,
+  .gap-4 {
+    page-break-inside: avoid !important;
+  }
+
+  /* Text and headers */
+  h1, h2, h3, h4, h5, h6 {
+    color: black !important;
+    page-break-after: avoid !important;
+  }
+
+  p, span, div, td, th {
+    color: black !important;
+  }
+
+  /* Shadows and borders */
+  .shadow,
+  .shadow-sm {
+    box-shadow: none !important;
+  }
+
+  .border {
+    border-color: #999 !important;
+  }
+
+  /* Table styling */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  td, th {
+    border: 1px solid #ddd !important;
+    padding: 8px !important;
+    color: black !important;
+  }
+
+  /* Background colors */
+  .bg-gray-50,
+  .bg-gray-100 {
+    background: #f9f9f9 !important;
+  }
+
+  .bg-blue-50 {
+    background: #e8f4fd !important;
+  }
+
+  .bg-green-50 {
+    background: #e8f5e9 !important;
+  }
+
+  /* Width constraints */
+  .max-w-7xl,
+  .max-w-6xl,
+  .max-w-4xl,
+  .max-w-2xl {
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  /* Padding */
+  .px-4, .sm\:px-6, .lg\:px-8 {
+    padding-left: 20px !important;
+    padding-right: 20px !important;
+  }
+
+  .py-8, .py-6, .py-4 {
+    page-break-inside: avoid !important;
+  }
+
+  /* Chart containers */
+  .recharts-surface {
+    background: white !important;
+  }
+
+  /* Lists */
+  li {
+    page-break-inside: avoid !important;
+  }
+
+  /* Details */
+  details {
+    page-break-inside: avoid !important;
+  }
+
+  summary {
+    page-break-after: avoid !important;
+  }
+
+  /* Overflow */
+  .overflow-auto,
+  .overflow-y-auto,
+  .overflow-x-auto {
+    overflow: visible !important;
+  }
+
+  /* Remove any position fixed or sticky that might interfere */
+  [style*="position: fixed"],
+  [style*="position: sticky"],
+  .fixed,
+  .sticky {
+    position: static !important;
+  }
+
+  /* Ensure visible content */
+  .hidden {
+    display: block !important;
+  }
+
+  [style*="display: none"] {
+    display: block !important;
+  }
+}
+
+/* Mobile Optimizations */
+@media (max-width: 768px) {
+  /* Compact KPI Cards for Mobile */
+  .kpi-card-mobile {
+    padding: 1rem !important;
+  }
+
+  .kpi-card-mobile .text-4xl {
+    font-size: 2rem !important;
+  }
+
+  .kpi-card-mobile .text-xs {
+    font-size: 0.65rem !important;
+  }
+
+  /* Simplified Grid Layouts */
+  .grid-cols-1.md\:grid-cols-2.xl\:grid-cols-3 {
+    grid-template-columns: 1fr !important;
+    gap: 1rem !important;
+  }
+
+  /* Compact Tables */
+  table {
+    font-size: 0.75rem !important;
+  }
+
+  th, td {
+    padding: 0.5rem !important;
+  }
+
+  /* Chart Responsiveness */
+  .recharts-wrapper {
+    height: 300px !important;
+    width: 100% !important;
+  }
+
+  .recharts-surface {
+    width: 100% !important;
+  }
+
+  /* Ensure chart text is readable */
+  .recharts-text {
+    font-size: 11px !important;
+  }
+
+  .recharts-cartesian-axis-tick-value {
+    font-size: 10px !important;
+  }
+
+  /* Compact Buttons */
+  button {
+    font-size: 0.875rem !important;
+    padding: 0.5rem 0.75rem !important;
+  }
+
+  /* Hide less important mobile elements */
+  .hide-mobile {
+    display: none !important;
+  }
+
+  /* Stack elements vertically */
+  .mobile-stack {
+    flex-direction: column !important;
+  }
+
+  /* Full width inputs */
+  input, select, textarea {
+    width: 100% !important;
+  }
+
+  /* Touch-friendly tap targets */
+  a, button, [role="button"] {
+    min-height: 44px !important;
+    min-width: 44px !important;
+  }
+
+  /* Simplified spacing */
+  .mobile-compact {
+    padding: 0.75rem !important;
+    margin-bottom: 0.75rem !important;
+  }
+
+  /* Sticky header on mobile */
+  .mobile-sticky-header {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 10 !important;
+    background: white !important;
+  }
+}
+
+/* Progressive Web App (PWA) styles */
+@media (display-mode: standalone) {
+  /* Running as PWA */
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .pwa-header {
+    padding-top: env(safe-area-inset-top);
+  }
+}
+
+/* Landscape mobile optimizations */
+@media (max-width: 768px) and (orientation: landscape) {
+  .recharts-wrapper {
+    height: 200px !important;
+  }
+
+  .kpi-card-mobile {
+    padding: 0.75rem !important;
+  }
+}

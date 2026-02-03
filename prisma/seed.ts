@@ -4,62 +4,249 @@ import * as bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 async function main() {
-  // Create default admin user
-  const hashedPassword = await bcrypt.hash('admin123', 10);
-  
+  // Create GM user
+  const gmPassword = await bcrypt.hash('gm123', 10);
   await prisma.user.upsert({
-    where: { email: 'admin@gms.com' },
+    where: { email: 'gm@sak.org' },
     update: {},
     create: {
-      email: 'admin@gms.com',
-      password: hashedPassword,
-      name: 'Admin User',
+      email: 'gm@sak.org',
+      password: gmPassword,
+      name: 'General Manager',
+      role: 'GM',
     },
   });
 
-  // Create historical data from 2020 to 2026
-  const reports = [];
-  
-  for (let year = 2020; year <= 2026; year++) {
-    for (let quarter = 1; quarter <= 4; quarter++) {
-      // Generate realistic data with some growth trends
-      const baseYear = year - 2020;
-      const baptisms = Math.floor(15 + Math.random() * 10 + baseYear * 2);
-      const professionOfFaith = Math.floor(10 + Math.random() * 8 + baseYear * 1.5);
-      const tithes = parseFloat((5000 + Math.random() * 2000 + baseYear * 500).toFixed(2));
-      const combinedOfferings = parseFloat((3000 + Math.random() * 1500 + baseYear * 400).toFixed(2));
-      const membership = Math.floor(450 + baseYear * 25 + quarter * 5);
-      const sabbathSchoolAttendance = Math.floor(300 + baseYear * 20 + quarter * 3);
+  // Create Trustee users
+  const trusteePassword = await bcrypt.hash('trustee123', 10);
+  await prisma.user.upsert({
+    where: { email: 'trustee@sak.org' },
+    update: {},
+    create: {
+      email: 'trustee@sak.org',
+      password: trusteePassword,
+      name: 'Board Trustee',
+      role: 'TRUSTEE',
+    },
+  });
 
-      reports.push({
-        year,
-        quarter,
-        baptisms,
-        professionOfFaith,
-        tithes,
-        combinedOfferings,
-        membership,
-        sabbathSchoolAttendance,
+  // Create Schools
+  const schoolNames = ['CPS', 'MENGO', 'NAKASERO', 'KISASI', 'OLD K\'LA', 'WINSTON', 'FAIRWAYS', 'KPM', 'KPS', 'KITINTALE', 'KIRA'];
+  for (const schoolName of schoolNames) {
+    await prisma.school.upsert({
+      where: { name: schoolName },
+      update: {},
+      create: {
+        name: schoolName,
+      },
+    });
+  }
+
+  // Create Weekly Reports for the last 4 weeks
+  const currentYear = 2026;
+  const weeklyReports = [
+    { week: 1, fees: 78, schools: 85, infra: 45, enrollment: 1250, theology: 180, p7: 72, syllabus: 70, admissions: 45, startDate: new Date('2026-01-06'), endDate: new Date('2026-01-12') },
+    { week: 2, fees: 82, schools: 88, infra: 50, enrollment: 1265, theology: 185, p7: 75, syllabus: 74, admissions: 52, startDate: new Date('2026-01-13'), endDate: new Date('2026-01-19') },
+    { week: 3, fees: 85, schools: 90, infra: 55, enrollment: 1280, theology: 190, p7: 78, syllabus: 78, admissions: 60, startDate: new Date('2026-01-20'), endDate: new Date('2026-01-26') },
+  ];
+
+  for (const report of weeklyReports) {
+    await prisma.weeklyReport.upsert({
+      where: { weekNumber_year_term: { weekNumber: report.week, year: currentYear, term: 1 } },
+      update: {},
+      create: {
+        weekNumber: report.week,
+        year: currentYear,
+        term: 1,
+        weekStartDate: report.startDate,
+        weekEndDate: report.endDate,
+        publishedAt: new Date(report.endDate),
+        isDraft: false,
+        feesCollectionPercent: report.fees,
+        schoolsExpenditurePercent: report.schools,
+        infrastructurePercent: report.infra,
+        totalEnrollment: report.enrollment,
+        theologyEnrollment: report.theology,
+        p7PrepExamsPercent: report.p7,
+        syllabusCoveragePercent: report.syllabus,
+        admissions: report.admissions,
+      },
+    });
+  }
+
+  // Seed KPI Data for current year (2026)
+  const kpiDataPoints = [
+    { month: 1, feesCollection: 78, schoolsExpenditure: 85, infrastructure: 45, totalEnroll: 1250, theologyEnroll: 180, p7Prep: 72 },
+    { month: 2, feesCollection: 82, schoolsExpenditure: 88, infrastructure: 50, totalEnroll: 1265, theologyEnroll: 185, p7Prep: 75 },
+    { month: 3, feesCollection: 85, schoolsExpenditure: 90, infrastructure: 55, totalEnroll: 1280, theologyEnroll: 190, p7Prep: 78 },
+    { month: 4, feesCollection: 88, schoolsExpenditure: 87, infrastructure: 60, totalEnroll: 1295, theologyEnroll: 195, p7Prep: 80 },
+    { month: 5, feesCollection: 90, schoolsExpenditure: 85, infrastructure: 65, totalEnroll: 1310, theologyEnroll: 200, p7Prep: 82 },
+    { month: 6, feesCollection: 92, schoolsExpenditure: 83, infrastructure: 70, totalEnroll: 1325, theologyEnroll: 205, p7Prep: 85 },
+  ];
+
+  for (const data of kpiDataPoints) {
+    await prisma.kPIData.upsert({
+      where: { month_year: { month: data.month, year: currentYear } },
+      update: {},
+      create: {
+        month: data.month,
+        year: currentYear,
+        feesCollectionPercent: data.feesCollection,
+        schoolsExpenditurePercent: data.schoolsExpenditure,
+        infrastructurePercent: data.infrastructure,
+        totalEnrollment: data.totalEnroll,
+        theologyEnrollment: data.theologyEnroll,
+        p7PrepExamsPercent: data.p7Prep,
+      },
+    });
+  }
+
+  // Seed Enrollment data (2020-2026)
+  const enrollmentData = [
+    { year: 2020, count: 980 },
+    { year: 2021, count: 1050 },
+    { year: 2022, count: 1120 },
+    { year: 2023, count: 1180 },
+    { year: 2024, count: 1240 },
+    { year: 2025, count: 1290 },
+    { year: 2026, count: 1325 },
+  ];
+
+  for (const data of enrollmentData) {
+    await prisma.enrollment.upsert({
+      where: { year_month: { year: data.year, month: 1 } },
+      update: {},
+      create: {
+        year: data.year,
+        month: 1,
+        count: data.count,
+      },
+    });
+  }
+
+  // Seed Other Income data (2023-2026)
+  const incomeSources = [
+    { name: 'Uniforms', isActive: true },
+    { name: 'Swimming', isActive: true },
+    { name: 'Canteen', isActive: true },
+    { name: 'Saving Scheme', isActive: true },
+  ];
+
+  for (const source of incomeSources) {
+    await prisma.incomeSource.upsert({
+      where: { name: source.name },
+      update: {},
+      create: source,
+    });
+  }
+
+  const otherIncomeData = [
+    { year: 2023, source: 'Uniforms', amount: 45000 },
+    { year: 2023, source: 'Swimming', amount: 28000 },
+    { year: 2023, source: 'Canteen', amount: 62000 },
+    { year: 2023, source: 'Saving Scheme', amount: 38000 },
+    { year: 2024, source: 'Uniforms', amount: 52000 },
+    { year: 2024, source: 'Swimming', amount: 32000 },
+    { year: 2024, source: 'Canteen', amount: 68000 },
+    { year: 2024, source: 'Saving Scheme', amount: 42000 },
+    { year: 2025, source: 'Uniforms', amount: 58000 },
+    { year: 2025, source: 'Swimming', amount: 35000 },
+    { year: 2025, source: 'Canteen', amount: 75000 },
+    { year: 2025, source: 'Saving Scheme', amount: 48000 },
+    { year: 2026, source: 'Uniforms', amount: 65000 },
+    { year: 2026, source: 'Swimming', amount: 40000 },
+    { year: 2026, source: 'Canteen', amount: 82000 },
+    { year: 2026, source: 'Saving Scheme', amount: 55000 },
+  ];
+
+  for (const data of otherIncomeData) {
+    await prisma.otherIncome.create({ data });
+  }
+
+  // Seed P.7 Prep Performance (2024-2026)
+  const p7PrepData = [
+    { year: 2024, prep1: 65, prep2: 68, prep3: 70, prep4: 72, prep5: 74, prep6: 76, prep7: 78, prep8: 80, prep9: 82 },
+    { year: 2025, prep1: 68, prep2: 70, prep3: 72, prep4: 75, prep5: 77, prep6: 79, prep7: 81, prep8: 83, prep9: 85 },
+    { year: 2026, prep1: 70, prep2: 72, prep3: 75, prep4: 78, prep5: 80, prep6: 82, prep7: 84, prep8: 86, prep9: 88 },
+  ];
+
+  for (const data of p7PrepData) {
+    await prisma.p7PrepPerformance.upsert({
+      where: { year: data.year },
+      update: {},
+      create: data,
+    });
+  }
+
+  // Seed Upcoming Events
+  const upcomingEvents = [
+    { date: new Date('2026-02-15'), activity: 'Parent-Teacher Conference', inCharge: 'Mr. Okello', rate: 'High' },
+    { date: new Date('2026-03-01'), activity: 'Sports Day', inCharge: 'Ms. Nakato', rate: 'Medium' },
+    { date: new Date('2026-03-20'), activity: 'Board Meeting', inCharge: 'GM', rate: 'High' },
+    { date: new Date('2026-04-05'), activity: 'End of Term Exams', inCharge: 'Academic Director', rate: 'High' },
+  ];
+
+  for (const event of upcomingEvents) {
+    await prisma.upcomingEvent.create({ data: event });
+  }
+
+  // Seed GM Projects
+  const projects = [
+    { projectName: 'New Library Construction', progress: 75, projectManager: 'Eng. Mukasa' },
+    { projectName: 'ICT Lab Upgrade', progress: 90, projectManager: 'Mr. Kibirige' },
+    { projectName: 'Playground Renovation', progress: 45, projectManager: 'Mr. Wasswa' },
+    { projectName: 'Dormitory Expansion', progress: 30, projectManager: 'Arch. Nambi' },
+  ];
+
+  for (const project of projects) {
+    await prisma.gMProject.create({ data: project });
+  }
+
+  // Seed Weekly Scorecard
+  const schools = ['CPS', 'MENGO', 'NAKASERO', 'KISASI', 'OLD K\'LA', 'WINSTON', 'FAIRWAYS', 'KPM', 'KPS', 'KITINTALE', 'KIRA'];
+  for (let week = 1; week <= 4; week++) {
+    for (const school of schools) {
+      await prisma.weeklyScorecard.upsert({
+        where: {
+          week_year_term_school: { week, year: 2026, term: 1, school },
+        },
+        update: {
+          academicPercent: 70 + Math.random() * 25,
+          financePercent: 75 + Math.random() * 20,
+          qualityPercent: 70 + Math.random() * 25,
+          tdpPercent: 65 + Math.random() * 30,
+          theologyPercent: 70 + Math.random() * 25,
+        },
+        create: {
+          week,
+          year: 2026,
+          term: 1,
+          school,
+          academicPercent: 70 + Math.random() * 25,
+          financePercent: 75 + Math.random() * 20,
+          qualityPercent: 70 + Math.random() * 25,
+          tdpPercent: 65 + Math.random() * 30,
+          theologyPercent: 70 + Math.random() * 25,
+        },
       });
     }
   }
 
-  // Insert all reports
-  for (const report of reports) {
-    await prisma.report.upsert({
-      where: {
-        year_quarter: {
-          year: report.year,
-          quarter: report.quarter,
-        },
-      },
-      update: report,
-      create: report,
-    });
+  // Seed Red Issues
+  const redIssues = [
+    { issue: 'Water supply disruption in Block A', inCharge: 'Maintenance Team', status: 'IN_PROGRESS' as const },
+    { issue: 'Delay in textbook delivery', inCharge: 'Procurement Officer', status: 'OPEN' as const },
+    { issue: 'Staff transport breakdown', inCharge: 'Transport Manager', status: 'RESOLVED' as const },
+    { issue: 'Kitchen equipment malfunction', inCharge: 'Catering Manager', status: 'IN_PROGRESS' as const },
+  ];
+
+  for (const issue of redIssues) {
+    await prisma.redIssue.create({ data: issue });
   }
 
-  console.log('Database seeded successfully!');
-  console.log('Default user: admin@gms.com / admin123');
+  console.log('✅ Database seeded successfully!');
+  console.log('👤 GM User: gm@sak.org / gm123');
+  console.log('👤 Trustee User: trustee@sak.org / trustee123');
 }
 
 main()

@@ -1,101 +1,154 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { PrismaClient } from "@prisma/client";
-import { z } from "zod";
+import { authOptions } from "@/lib/auth";
 
 const prisma = new PrismaClient();
 
-const reportSchema = z.object({
-  year: z.number().min(2020).max(2100),
-  quarter: z.number().min(1).max(4),
-  baptisms: z.number().min(0),
-  professionOfFaith: z.number().min(0),
-  tithes: z.number().min(0),
-  combinedOfferings: z.number().min(0),
-  membership: z.number().min(0),
-  sabbathSchoolAttendance: z.number().min(0),
-});
-
-// GET /api/reports - Get all reports
+// GET /api/reports - Get all weekly reports with optional filtering
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession();
+    const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const { searchParams } = new URL(request.url);
     const year = searchParams.get("year");
-    const quarter = searchParams.get("quarter");
+    const weekNumber = searchParams.get("weekNumber");
+    const term = searchParams.get("term");
 
-    let reports;
-    if (year && quarter) {
-      reports = await prisma.report.findUnique({
-        where: {
-          year_quarter: {
-            year: parseInt(year),
-            quarter: parseInt(quarter),
-          },
-        },
-      });
-      return NextResponse.json(reports);
-    }
+    const where: any = {};
+    if (year) where.year = parseInt(year);
+    if (weekNumber) where.weekNumber = parseInt(weekNumber);
+    if (term) where.term = parseInt(term);
 
-    reports = await prisma.report.findMany({
-      orderBy: [{ year: "desc" }, { quarter: "desc" }],
+    const reports = await prisma.weeklyReport.findMany({
+      where,
+      orderBy: [{ year: "desc" }, { weekNumber: "desc" }],
     });
 
-    return NextResponse.json(reports);
+    return NextResponse.json({ data: reports });
   } catch (error) {
     console.error("Error fetching reports:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
-// POST /api/reports - Create or update a report
+// POST /api/reports - Create a new weekly report
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession();
+    const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const body = await request.json();
-    const validatedData = reportSchema.parse(body);
+    const {
+      year,
+      weekNumber,
+      term = 1,
+      weekStartDate,
+      weekEndDate,
+      feesCollectionPercent,
+      schoolsExpenditurePercent,
+      infrastructurePercent,
+      totalEnrollment,
+      theologyEnrollment,
+      p7PrepExamsPercent,
+      syllabusCoveragePercent,
+      admissions,
+      isDraft,
+    } = body;
 
-    const report = await prisma.report.upsert({
+    // Calculate week start and end dates if not provided
+    let startDate = weekStartDate ? new Date(weekStartDate) : null;
+    let endDate = weekEndDate ? new Date(weekEndDate) : null;
+
+    if (!startDate || isNaN(startDate.getTime())) {
+      // Calculate from ISO week number
+      const jan4 = new Date(year, 0, 4);
+      const dayOfWeek = jan4.getDay();
+      const firstMonday = new Date(jan4);
+      firstMonday.setDate(jan4.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1));
+      startDate = new Date(firstMonday);
+      startDate.setDate(startDate.getDate() + (weekNumber - 1) * 7);
+    }
+
+    if (!endDate || isNaN(endDate.getTime())) {
+      endDate = new Date(startDate);
+      endDate.setDate(endDate.getDate() + 6);
+    }
+
+    const report = await prisma.weeklyReport.upsert({
       where: {
-        year_quarter: {
-          year: validatedData.year,
-          quarter: validatedData.quarter,
-        },
+        weekNumber_year_term: { weekNumber, year, term },
       },
       update: {
-        baptisms: validatedData.baptisms,
-        professionOfFaith: validatedData.professionOfFaith,
-        tithes: validatedData.tithes,
-        combinedOfferings: validatedData.combinedOfferings,
-        membership: validatedData.membership,
-        sabbathSchoolAttendance: validatedData.sabbathSchoolAttendance,
+        term,
+        weekStartDate: startDate,
+        weekEndDate: endDate,
+        feesCollectionPercent: parseFloat(feesCollectionPercent) || 0,
+        schoolsExpenditurePercent: parseFloat(schoolsExpenditurePercent) || 0,
+        infrastructurePercent: parseFloat(infrastructurePercent) || 0,
+        totalEnrollment: parseInt(totalEnrollment) || 0,
+        theologyEnrollment: parseInt(theologyEnrollment) || 0,
+        p7PrepExamsPercent: parseFloat(p7PrepExamsPercent) || 0,
+        syllabusCoveragePercent: parseFloat(syllabusCoveragePercent) || 0,
+        admissions: parseInt(admissions) || 0,
+        isDraft: isDraft !== false,
       },
-      create: validatedData,
+      create: {
+        year,
+        term,
+        weekNumber,
+        weekStartDate: startDate,
+        weekEndDate: endDate,
+        feesCollectionPercent: parseFloat(feesCollectionPercent) || 0,
+        schoolsExpenditurePercent: parseFloat(schoolsExpenditurePercent) || 0,
+        infrastructurePercent: parseFloat(infrastructurePercent) || 0,
+        totalEnrollment: parseInt(totalEnrollment) || 0,
+        theologyEnrollment: parseInt(theologyEnrollment) || 0,
+        p7PrepExamsPercent: parseFloat(p7PrepExamsPercent) || 0,
+        syllabusCoveragePercent: parseFloat(syllabusCoveragePercent) || 0,
+        admissions: parseInt(admissions) || 0,
+        isDraft: isDraft !== false,
+      },
     });
 
-    return NextResponse.json(report);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: "Validation error", details: error.errors },
-        { status: 400 }
-      );
+    // Notify all trustees about the report update
+    if (session.user.role === 'GM') {
+      const trustees = await prisma.user.findMany({
+        where: { role: 'TRUSTEE' },
+        select: { id: true },
+      });
+
+      const isUpdate = report.weekNumber && report.year;
+      const notificationData = trustees.map(trustee => ({
+        type: 'REPORT_PUBLISHED' as const,
+        title: `GM posted Week ${weekNumber} ${year} Report`,
+        message: isUpdate 
+          ? `Weekly report for Week ${weekNumber}, ${year} has been ${isDraft ? 'saved as draft' : 'published'}`
+          : `New weekly report created for Week ${weekNumber}, ${year}`,
+        data: JSON.stringify({
+          reportId: report.id,
+          weekNumber: report.weekNumber,
+          year: report.year,
+        }),
+        userId: trustee.id,
+        isRead: false,
+      }));
+
+      if (notificationData.length > 0) {
+        await prisma.notification.createMany({
+          data: notificationData,
+        });
+      }
     }
-    console.error("Error creating/updating report:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+
+    return NextResponse.json({ data: report }, { status: 201 });
+  } catch (error: any) {
+    console.error("Error creating report:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

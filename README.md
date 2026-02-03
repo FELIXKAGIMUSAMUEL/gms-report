@@ -1,337 +1,245 @@
-# GMS Report - Global Mission Statistics
+# 📊 General Manager's Report Portal
 
-A comprehensive web application for managing and visualizing mission statistics including baptisms, tithes, membership counts, and Sabbath School attendance data from 2020-2026.
+A modern, real-time web application for non-profit/educational organizations to manage and view weekly performance reports. Features executive-grade design, role-based access, live updates, and trustee reactions.
 
-## Features
+## ✨ Features
 
-- **Secure Authentication**: NextAuth.js-based authentication system
-- **Interactive Dashboard**: Real-time KPIs with trend indicators
-- **Data Visualization**: Interactive charts using Recharts
-- **Quarterly Reports**: Create and update quarterly mission statistics
-- **Historical Data**: View trends from 2020 to 2026
-- **Responsive Design**: Mobile-friendly interface with Tailwind CSS
+### 🎭 User Roles
+- **General Manager (GM)** - Full access to create/update/delete weekly reports
+- **Trustees/Directors** - View dashboard + add reactions (👍 👎 💬) and comments
 
-## Tech Stack
+### 📈 Dashboard Highlights
+- **6 Key Metric Cards** with trend indicators (↑ ↓)
+  - Fees Collection %
+  - Schools Expenditure %
+  - Infrastructure Expenditure %
+  - Total Enrollment (with previous comparison)
+  - Theology Enrollment
+  - P.7 Preparation Exams %
 
-- **Framework**: Next.js 14.2.35 (App Router) - Latest security patches applied
+### 📊 Interactive Charts
+- **Enrollment Trends** - Line chart (2020-2026+)
+- **Other Income Performance** - Grouped bar chart by source
+- **P.7 Prep Performance** - Multi-year comparison (9 prep schools)
+
+### 📋 Data Tables
+- **Upcoming Events** - Date, Activity, In-Charge, Priority
+- **GM Projects** - Progress bars, Project Managers
+- **School Scorecard** - Color-coded performance metrics
+- **Red Flag Issues** - Status tracking (Open/In Progress/Resolved)
+
+### 💬 Trustee Engagement
+- React to any section with thumbs up/down
+- Add comments to specific cards
+- View all reactions and discussions
+- Real-time updates every 30 seconds
+
+### 🎨 Modern Design
+- Clean, professional interface
+- Soft blues, whites, grays color scheme
+- Smooth animations and transitions
+- Card-based responsive layout
+- Executive dashboard polish
+
+### 📱 Fully Responsive
+- Perfect on mobile phones
+- Optimized for tablets
+- Beautiful on desktop
+- Mobile-first data entry
+
+## 🚀 Quick Start
+
+### Application is Ready!
+
+**Open**: http://localhost:3000
+
+## 👤 Login Credentials
+
+### General Manager
+- **Email**: `gm@sak.org`
+- **Password**: `gm123`
+- **Access**: Create/edit weekly reports, all data
+
+### Board Trustee
+- **Email**: `trustee@sak.org`
+- **Password**: `trustee123`
+- **Access**: View dashboard, add reactions/comments
+
+## 📖 How to Use
+
+### As General Manager
+
+1. **Login** with `gm@sak.org / gm123`
+2. **Navigate** using the sidebar:
+   - 🏠 Dashboard - View current week's report
+   - ✏️ Update Report - Enter this week's data
+   - 🕐 Past Reports - View/edit historical data
+3. **Update Report**:
+   - Enter all metrics for the week
+   - Add/edit events, projects, issues
+   - Save as draft or publish immediately
+   - Data appears instantly for trustees
+
+### As Trustee
+
+1. **Login** with `trustee@sak.org / trustee123`
+2. **View Dashboard** - See latest weekly report
+3. **React to Sections**:
+   - Click 👍 for approval
+   - Click 👎 for concerns
+   - Click 💬 to add comments
+4. **Dashboard Auto-Refreshes** every 30 seconds
+
+## 🏗️ Architecture
+
+### Tech Stack
+- **Framework**: Next.js 14.2 (App Router)
 - **Language**: TypeScript
-- **Database**: PostgreSQL with Prisma ORM
-- **Authentication**: NextAuth.js
-- **Styling**: Tailwind CSS
+- **Database**: PostgreSQL + Prisma ORM
+- **Auth**: NextAuth.js (role-based)
 - **Charts**: Recharts
-- **Validation**: Zod
+- **Icons**: Hero Icons
+- **Styling**: Tailwind CSS
 
-## Prerequisites
+### Key Features
+- **Weekly Snapshots** - Historical data preserved
+- **Real-time Updates** - 30-second polling
+- **Reaction System** - Trustee engagement tracking
+- **Sidebar Navigation** - Modern, clean UI
+- **Auto-save** - Draft mode for GM entries
+- **Mobile-optimized** - Touch-friendly forms
 
-Before you begin, ensure you have the following installed:
+## 📊 Database Models
 
-- Node.js 18.x or later
-- PostgreSQL 12.x or later
-- npm or yarn package manager
+- `User` - Accounts (GM/TRUSTEE roles)
+- `WeeklyReport` - Weekly performance snapshots
+- `Reaction` - Trustee feedback (thumbs/comments)
+- `Enrollment` - Historical enrollment data
+- `OtherIncome` - Income by category/year
+- `P7PrepPerformance` - Exam results
+- `UpcomingEvent` - Scheduled activities
+- `GMProject` - Project tracking
+- `WeeklyScorecard` - School performance
+- `RedIssue` - Issues tracker
 
-## Getting Started with VS Code
+## 🎯 What's New
 
-**New to this project?** See [VSCODE_SETUP.md](VSCODE_SETUP.md) for detailed instructions on:
-- How to clone this repository and checkout the pull request branch
-- Setting up the project in VS Code
-- Installing recommended VS Code extensions
-- Troubleshooting common setup issues
+### Compared to Previous Version
 
-Quick start:
-```bash
-git clone https://github.com/mayegamustafa/gms-report.git
-cd gms-report
-git checkout copilot/build-gms-report-application
-code .  # Opens in VS Code
-```
+✅ **Weekly Snapshots** - Historical tracking  
+✅ **Reaction System** - Trustee engagement  
+✅ **Sidebar Navigation** - Modern layout  
+✅ **Real-time Polling** - Auto-refresh data  
+✅ **Updated Emails** - @sak.org domain  
+✅ **Modern Design** - Executive-grade UI  
+✅ **Better Mobile UX** - Optimized forms  
+✅ **Comment Threads** - Discussion on cards  
 
-## Installation
-
-1. **Clone the repository**
-
-```bash
-git clone https://github.com/mayegamustafa/gms-report.git
-cd gms-report
-```
-
-2. **Install dependencies**
-
-```bash
-npm install
-```
-
-3. **Set up environment variables**
-
-Copy the `.env.example` file to `.env` and update the values:
+## 🛠️ Development Commands
 
 ```bash
-cp .env.example .env
-```
+# Already running at http://localhost:3000
 
-Edit `.env` and configure:
-
-```env
-# Database - Update with your PostgreSQL credentials
-DATABASE_URL="postgresql://username:password@localhost:5432/gms_report?schema=public"
-
-# NextAuth - Generate a secure secret
-NEXTAUTH_SECRET="your-secret-key-here-change-in-production"
-NEXTAUTH_URL="http://localhost:3000"
-```
-
-To generate a secure `NEXTAUTH_SECRET`:
-
-```bash
-openssl rand -base64 32
-```
-
-4. **Set up the database**
-
-```bash
-# Generate Prisma client
-npx prisma generate
-
-# Run migrations
-npx prisma migrate dev --name init
-
-# Seed the database with sample data
-npm run db:seed
-```
-
-This will create:
-- A default admin user (email: `admin@gms.com`, password: `admin123`)
-- Historical data from 2020 to 2026 with realistic statistics
-
-## Running the Application
-
-### Development Mode
-
-```bash
+# To restart server
+pkill -f "next dev"
 npm run dev
-```
 
-The application will be available at [http://localhost:3000](http://localhost:3000)
+# Database management
+npx prisma studio      # Visual database editor
+npx prisma generate    # Regenerate Prisma client
+npm run db:seed        # Reseed database
 
-### Production Build
-
-```bash
+# Build for production
 npm run build
-npm start
+npm run start
 ```
 
-## Default Login Credentials
+## 📱 Mobile Experience
 
-After seeding the database, you can log in with:
+- **Touch-optimized** buttons and inputs
+- **Large forms** for easy data entry
+- **Swipe-friendly** tables
+- **Hamburger menu** for navigation
+- **Responsive charts** that scale
+- **Fast loading** on mobile networks
 
-- **Email**: `admin@gms.com`
-- **Password**: `admin123`
+## 🎨 Design System
 
-**⚠️ Important**: Change these credentials in production!
+### Colors
+- **Primary**: Blue (#3b82f6)
+- **Success**: Green (#10b981)
+- **Warning**: Yellow (#f59e0b)
+- **Danger**: Red (#ef4444)
+- **Purple**: (#8b5cf6)
 
-## Testing the Application
+### Components
+- **Cards**: Rounded corners, subtle shadows
+- **Buttons**: Smooth transitions
+- **Forms**: Large, accessible inputs
+- **Tables**: Clean, readable
+- **Charts**: Professional, interactive
 
-For a comprehensive testing guide, see [TESTING.md](TESTING.md) which includes:
-- Step-by-step setup verification
-- Manual testing checklist for all features
-- API endpoint testing
-- Responsive design testing
-- Common issues and troubleshooting
-- Success criteria checklist
+## 🔄 Real-time Features
 
-Quick test:
-1. Run `npm run dev`
-2. Open http://localhost:3000
-3. Login with `admin@gms.com` / `admin123`
-4. Verify dashboard loads with KPIs, charts, and data table
+- Dashboard **auto-refreshes** every 30 seconds
+- Reactions appear **instantly** for all users
+- GM updates are **immediately** visible
+- No manual page refresh needed
+- Live **comment threads** on sections
 
-## Project Structure
+## ✅ Testing Checklist
 
-```
-gms-report/
-├── prisma/
-│   ├── schema.prisma      # Database schema
-│   └── seed.ts            # Database seeding script
-├── src/
-│   ├── app/
-│   │   ├── api/
-│   │   │   ├── auth/      # NextAuth configuration
-│   │   │   ├── reports/   # Reports API endpoints
-│   │   │   └── historical/ # Historical data API
-│   │   ├── dashboard/     # Dashboard page
-│   │   ├── login/         # Login page
-│   │   ├── update-report/ # Update report page
-│   │   ├── layout.tsx     # Root layout
-│   │   ├── page.tsx       # Home page
-│   │   ├── providers.tsx  # Session provider
-│   │   └── globals.css    # Global styles
-│   ├── components/
-│   │   └── dashboard/     # Dashboard components
-│   │       ├── KPICard.tsx
-│   │       ├── TrendsChart.tsx
-│   │       └── QuarterlyTable.tsx
-│   └── types/
-│       └── next-auth.d.ts # NextAuth type definitions
-├── package.json
-├── tsconfig.json
-├── tailwind.config.ts
-└── .env.example
-```
+### GM Workflow
+- [ ] Login as GM
+- [ ] Navigate to "Update Report"
+- [ ] Enter weekly metrics
+- [ ] Add an event
+- [ ] Create a project
+- [ ] Publish report
+- [ ] View dashboard updates
 
-## API Endpoints
+### Trustee Workflow
+- [ ] Login as Trustee
+- [ ] View current week's report
+- [ ] Click 👍 on a metric card
+- [ ] Add comment to a chart
+- [ ] See reaction count update
+- [ ] Wait 30s for auto-refresh
 
-### Authentication
-- `POST /api/auth/signin` - User login
-- `POST /api/auth/signout` - User logout
+### Mobile Testing
+- [ ] Open on phone browser
+- [ ] Test hamburger menu
+- [ ] Enter data as GM
+- [ ] View charts on mobile
+- [ ] React as trustee on phone
 
-### Reports
-- `GET /api/reports` - Get all reports
-- `GET /api/reports?year=2024&quarter=1` - Get specific report
-- `POST /api/reports` - Create or update a report
-- `GET /api/reports/[id]` - Get report by ID
-- `DELETE /api/reports/[id]` - Delete a report
+## 🚀 Production Ready
 
-### Historical Data
-- `GET /api/historical?groupBy=quarter` - Get quarterly data
-- `GET /api/historical?groupBy=year` - Get yearly aggregated data
-- `GET /api/historical?startYear=2020&endYear=2026` - Filter by year range
+The app is ready to deploy to:
+- **Vercel** (recommended)
+- **Railway**
+- **Render**
+- Any Node.js + PostgreSQL host
 
-## Database Schema
-
-### User Model
-- `id`: Unique identifier
-- `email`: User email (unique)
-- `password`: Hashed password
-- `name`: User name (optional)
-
-### Report Model
-- `id`: Unique identifier
-- `year`: Report year
-- `quarter`: Report quarter (1-4)
-- `baptisms`: Number of baptisms
-- `professionOfFaith`: Number of professions of faith
-- `tithes`: Tithe amount
-- `combinedOfferings`: Combined offerings amount
-- `membership`: Total membership count
-- `sabbathSchoolAttendance`: Sabbath School attendance count
-
-## Prisma Commands
-
-```bash
-# Generate Prisma Client
-npx prisma generate
-
-# Create a migration
-npx prisma migrate dev --name migration_name
-
-# Apply migrations
-npx prisma migrate deploy
-
-# Open Prisma Studio (Database GUI)
-npx prisma studio
-
-# Reset database
-npx prisma migrate reset
-
-# Seed database
-npm run db:seed
+### Environment Variables
+```env
+DATABASE_URL="your-production-postgresql-url"
+NEXTAUTH_SECRET="generate-with-openssl-rand-base64-32"
+NEXTAUTH_URL="https://your-domain.com"
 ```
 
-## Development
+## 📞 Support
 
-### Linting
+**Application Status**: ✅ Running at http://localhost:3000
 
-```bash
-npm run lint
-```
+**Quick Links**:
+- Dashboard: http://localhost:3000/dashboard
+- Login: http://localhost:3000/login
 
-### Building
+**Test Accounts**:
+- GM: `gm@sak.org` / `gm123`
+- Trustee: `trustee@sak.org` / `trustee123`
 
-```bash
-npm run build
-```
+---
 
-## Features Overview
-
-### Dashboard
-- Real-time KPI cards showing current statistics
-- Trend indicators comparing current vs. previous quarter
-- Interactive line charts for historical trends
-- Quarterly data table with comprehensive statistics
-
-### Update Report
-- Form to create or update quarterly reports
-- Validation for all input fields
-- Auto-load existing report data
-- Success/error notifications
-
-### Authentication
-- Secure credential-based authentication
-- Protected routes and API endpoints
-- Session management with NextAuth.js
-
-## Security
-
-- Passwords are hashed using bcryptjs
-- API routes are protected with session checks
-- Environment variables for sensitive data
-- SQL injection protection via Prisma ORM
-- Input validation using Zod
-
-## Troubleshooting
-
-### Database Connection Issues
-
-If you encounter database connection errors:
-
-1. Verify PostgreSQL is running:
-```bash
-sudo service postgresql status
-```
-
-2. Check your DATABASE_URL in `.env`
-3. Ensure the database exists:
-```bash
-psql -U postgres
-CREATE DATABASE gms_report;
-```
-
-### Prisma Client Issues
-
-If Prisma Client is not generated:
-
-```bash
-npx prisma generate
-```
-
-### Build Errors
-
-Clear Next.js cache:
-
-```bash
-rm -rf .next
-npm run build
-```
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-## License
-
-This project is licensed under the MIT License.
-
-## Support
-
-For issues and questions, please open an issue on GitHub.
-
-## Acknowledgments
-
-- Built with Next.js 14
-- Database management with Prisma
-- Authentication powered by NextAuth.js
-- Charts by Recharts
-- Styled with Tailwind CSS
+**Built with ❤️ for executive-level reporting**
