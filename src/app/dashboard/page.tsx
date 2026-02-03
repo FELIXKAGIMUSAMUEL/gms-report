@@ -1087,21 +1087,25 @@ export default function Dashboard() {
 				<div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-10">
 					{kpiMetrics.map((metric, idx) => {
 						const trend = metric.value - metric.lastValue;
+						const isTheology = metric.sectionId === "theology-enrollment";
+						const isEnrollment = metric.sectionId === "enrollment";
+						const useAbsoluteChange = isTheology || isEnrollment;
+						
 						let trendPercent = "0";
-						if (metric.lastValue === 0 && metric.value > 0) {
-							trendPercent = "100";
-						} else if (metric.lastValue === 0 && metric.value === 0) {
-							trendPercent = "0";
-						} else if (metric.lastValue !== 0) {
-							trendPercent = ((trend / Math.abs(metric.lastValue)) * 100).toFixed(1);
+						if (!useAbsoluteChange) {
+							if (metric.lastValue === 0 && metric.value > 0) {
+								trendPercent = "100";
+							} else if (metric.lastValue === 0 && metric.value === 0) {
+								trendPercent = "0";
+							} else if (metric.lastValue !== 0) {
+								trendPercent = ((trend / Math.abs(metric.lastValue)) * 100).toFixed(1);
+							}
 						}
 						const isPositive = trend > 0;
 						const isNeutral = trend === 0;
 						const hasTarget = metric.target !== undefined && metric.target !== null;
 						const targetMet = hasTarget && metric.value >= (metric.target || 0);
 						const targetProgress = hasTarget && metric.target ? Math.min((metric.value / metric.target) * 100, 100) : 0;
-						const isTheology = metric.sectionId === "theology-enrollment";
-						const isEnrollment = metric.sectionId === "enrollment";
 
 						const sectionReactions = reactions.filter(
 							r => r.sectionId === metric.sectionId && r.weeklyReportId === currentReportId
@@ -1152,6 +1156,16 @@ export default function Dashboard() {
 									>
 										{isNeutral ? (
 											<span>Flat</span>
+										) : useAbsoluteChange ? (
+											isPositive ? (
+												<>
+													<ArrowTrendingUpIcon className="w-4 h-4" /> +{Math.abs(trend).toLocaleString()}
+												</>
+											) : (
+												<>
+													<ArrowTrendingDownIcon className="w-4 h-4" /> {trend.toLocaleString()}
+												</>
+											)
 										) : isPositive ? (
 											<>
 												<ArrowTrendingUpIcon className="w-4 h-4" /> +{trendPercent}%
@@ -1197,11 +1211,11 @@ export default function Dashboard() {
 								)}
 
 								<div className="flex items-center justify-between text-xs text-gray-600 mb-4">
-									{isTheology ? (
-										// Theology uses previous TERM, not previous week
+									{isTheology || isEnrollment ? (
+										// Theology and Enrollment use previous TERM, not previous week
 										metric.lastValue > 0 ? (
 											<span>
-												Last term: <span className="font-semibold text-gray-800">{metric.lastValue}</span>
+												Last term: <span className="font-semibold text-gray-800">{metric.lastValue.toLocaleString()}</span>
 											</span>
 										) : (
 											<span className="italic">No previous term data</span>

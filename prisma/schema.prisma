@@ -186,6 +186,29 @@ model P7PrepPerformance {
   @@index([year])
 }
 
+// P.7 Prep Exam Results - Detailed tracking per school per prep
+model P7PrepResult {
+  id              String   @id @default(cuid())
+  school          String   // School name
+  prepNumber      Int      // 1-9 (Prep 1 through Prep 9)
+  term            Int      // 1, 2, 3
+  year            Int
+  enrollment      Int      @default(0) // Total registered students
+  divisionI       Int      @default(0) // Division 1 count
+  divisionII      Int      @default(0) // Division 2 count
+  divisionIII     Int      @default(0) // Division 3 count
+  divisionIV      Int      @default(0) // Division 4 count
+  averageScore    Float    @default(0) // Average score 0-100
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([school, prepNumber, term, year])
+  @@index([school])
+  @@index([year, term])
+  @@index([prepNumber])
+  @@index([school, year, term])
+}
+
 // Upcoming Events
 model UpcomingEvent {
   id        String   @id @default(cuid())

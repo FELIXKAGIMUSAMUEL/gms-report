@@ -78,6 +78,7 @@ export default function DashboardLayout({
   const [updateReportOpen, setUpdateReportOpen] = useState(pathname.includes("-entry"));
   const [enrollmentOpen, setEnrollmentOpen] = useState(pathname.includes("enrollment") && !pathname.includes("theology"));
   const [theologyOpen, setTheologyOpen] = useState(pathname.includes("theology"));
+  const [p7prepOpen, setP7PrepOpen] = useState(pathname.includes("p7-prep"));
   const [messagingOpen, setMessagingOpen] = useState(false);
   const [unreadMessages, setUnreadMessages] = useState(0);
   
@@ -155,6 +156,7 @@ export default function DashboardLayout({
     { name: "Enter Data", href: "#", icon: DocumentPlusIcon, show: isGM, isDropdown: true, dropdownKey: "updateReport" },
     { name: "Schools Enrollment", href: "#", icon: UserGroupIcon, show: isGM, isDropdown: true, dropdownKey: "enrollment" },
     { name: "Theology Enrollment", href: "#", icon: AcademicCapIcon, show: isGM, isDropdown: true, dropdownKey: "theology" },
+    { name: "P.7 Prep Tracking", href: "#", icon: AcademicCapIcon, show: isGM, isDropdown: true, dropdownKey: "p7prep" },
     { name: "Analytics", href: "/analytics", icon: ChartBarIcon, show: true },
     { name: "Past Reports", href: "/past-reports", icon: ClockIcon, show: true },
     { name: "Settings", href: "/settings", icon: UserCircleIcon, show: isGM },
@@ -177,6 +179,11 @@ export default function DashboardLayout({
   const enrollmentSections = [
     { name: "Enrollment Tracking", href: "/enrollment-entry", icon: DocumentPlusIcon, description: "Enter enrollment numbers for each school by class and term" },
     { name: "Enrollment Analysis", href: "/enrollment-analysis", icon: ChartBarIcon, description: "Detailed trends, comparisons, and variance analysis" },
+  ];
+
+  const p7PrepSections = [
+    { name: "P.7 Prep Results Tracking", href: "/p7-prep-entry", icon: DocumentPlusIcon, description: "Enter division results and average scores for each prep exam" },
+    { name: "P.7 Prep Analysis", href: "/p7-prep-analysis", icon: ChartBarIcon, description: "Prep trends, school rankings, and performance analysis" },
   ];
 
   const handleSignOut = () => {
@@ -322,12 +329,15 @@ export default function DashboardLayout({
                           setEnrollmentOpen(!enrollmentOpen);
                         } else if (item.dropdownKey === "theology") {
                           setTheologyOpen(!theologyOpen);
+                        } else if (item.dropdownKey === "p7prep") {
+                          setP7PrepOpen(!p7prepOpen);
                         }
                       }}
                       className={`w-full group flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                         (item.dropdownKey === "updateReport" && pathname.includes("-entry")) ||
                         (item.dropdownKey === "enrollment" && pathname.includes("enrollment") && !pathname.includes("theology")) ||
-                        (item.dropdownKey === "theology" && pathname.includes("theology"))
+                        (item.dropdownKey === "theology" && pathname.includes("theology")) ||
+                        (item.dropdownKey === "p7prep" && pathname.includes("p7-prep"))
                           ? "bg-blue-50 text-blue-700"
                           : "text-gray-700 hover:bg-gray-100"
                       }`}
@@ -338,7 +348,8 @@ export default function DashboardLayout({
                       </div>
                       {((item.dropdownKey === "updateReport" && updateReportOpen) || 
                         (item.dropdownKey === "enrollment" && enrollmentOpen) ||
-                        (item.dropdownKey === "theology" && theologyOpen)) ? (
+                        (item.dropdownKey === "theology" && theologyOpen) ||
+                        (item.dropdownKey === "p7prep" && p7prepOpen)) ? (
                         <ChevronUpIcon className="h-4 w-4" />
                       ) : (
                         <ChevronDownIcon className="h-4 w-4" />
@@ -380,6 +391,22 @@ export default function DashboardLayout({
                     {item.dropdownKey === "theology" && theologyOpen && (
                       <div className="ml-8 space-y-1">
                         {theologySections.map((section) => (
+                          <Link
+                            key={section.name}
+                            href={section.href}
+                            onClick={() => setSidebarOpen(false)}
+                            className="group flex items-center px-3 py-2 text-sm font-medium rounded-lg text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+                          >
+                            <section.icon className="mr-2 h-4 w-4" />
+                            <span className="text-xs">{section.name}</span>
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+
+                    {item.dropdownKey === "p7prep" && p7prepOpen && (
+                      <div className="ml-8 space-y-1">
+                        {p7PrepSections.map((section) => (
                           <Link
                             key={section.name}
                             href={section.href}
@@ -462,12 +489,15 @@ export default function DashboardLayout({
                               setEnrollmentOpen(!enrollmentOpen);
                             } else if (item.dropdownKey === "theology") {
                               setTheologyOpen(!theologyOpen);
+                            } else if (item.dropdownKey === "p7prep") {
+                              setP7PrepOpen(!p7prepOpen);
                             }
                           }}
                           className={`w-full group flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
                             (item.dropdownKey === "updateReport" && pathname.includes("-entry")) ||
                             (item.dropdownKey === "enrollment" && pathname.includes("enrollment") && !pathname.includes("theology")) ||
-                            (item.dropdownKey === "theology" && pathname.includes("theology"))
+                            (item.dropdownKey === "theology" && pathname.includes("theology")) ||
+                            (item.dropdownKey === "p7prep" && pathname.includes("p7-prep"))
                               ? "bg-blue-50 text-blue-700 shadow-sm"
                               : "text-gray-700 hover:bg-gray-50 hover:text-blue-600"
                           }`}
@@ -476,7 +506,8 @@ export default function DashboardLayout({
                             <item.icon className={`mr-3 h-5 w-5 ${
                               (item.dropdownKey === "updateReport" && pathname.includes("-entry")) ||
                               (item.dropdownKey === "enrollment" && pathname.includes("enrollment") && !pathname.includes("theology")) ||
-                              (item.dropdownKey === "theology" && pathname.includes("theology"))
+                              (item.dropdownKey === "theology" && pathname.includes("theology")) ||
+                              (item.dropdownKey === "p7prep" && pathname.includes("p7-prep"))
                                 ? "text-blue-600" 
                                 : "text-gray-400"
                             }`} />
@@ -484,7 +515,8 @@ export default function DashboardLayout({
                           </div>
                           {((item.dropdownKey === "updateReport" && updateReportOpen) || 
                             (item.dropdownKey === "enrollment" && enrollmentOpen) ||
-                            (item.dropdownKey === "theology" && theologyOpen)) ? (
+                            (item.dropdownKey === "theology" && theologyOpen) ||
+                            (item.dropdownKey === "p7prep" && p7prepOpen)) ? (
                             <ChevronUpIcon className="h-4 w-4" />
                           ) : (
                             <ChevronDownIcon className="h-4 w-4" />
@@ -524,6 +556,21 @@ export default function DashboardLayout({
                         {item.dropdownKey === "theology" && theologyOpen && (
                           <div className="ml-8 space-y-1 mt-1">
                             {theologySections.map((section) => (
+                              <Link
+                                key={section.name}
+                                href={section.href}
+                                className="group flex items-center px-3 py-2 text-sm font-medium rounded-lg text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+                              >
+                                <section.icon className="mr-2 h-4 w-4" />
+                                <span className="text-xs">{section.name}</span>
+                              </Link>
+                            ))}
+                          </div>
+                        )}
+
+                        {item.dropdownKey === "p7prep" && p7prepOpen && (
+                          <div className="ml-8 space-y-1 mt-1">
+                            {p7PrepSections.map((section) => (
                               <Link
                                 key={section.name}
                                 href={section.href}
