@@ -79,6 +79,7 @@ export default function DashboardLayout({
   const [enrollmentOpen, setEnrollmentOpen] = useState(pathname.includes("enrollment") && !pathname.includes("theology"));
   const [theologyOpen, setTheologyOpen] = useState(pathname.includes("theology"));
   const [p7prepOpen, setP7PrepOpen] = useState(pathname.includes("p7-prep"));
+  const [trusteeHubOpen, setTrusteeHubOpen] = useState(pathname.includes("trustee-"));
   const [messagingOpen, setMessagingOpen] = useState(false);
   const [unreadMessages, setUnreadMessages] = useState(0);
   
@@ -150,15 +151,18 @@ export default function DashboardLayout({
   if (!session) return null;
 
   const isGM = session.user.role === "GM";
+  const isTrustee = session.user.role === "TRUSTEE";
 
   const navigation = [
     { name: "Dashboard", href: "/dashboard", icon: HomeIcon, show: true },
     { name: "Enter Data", href: "#", icon: DocumentPlusIcon, show: isGM, isDropdown: true, dropdownKey: "updateReport" },
-    { name: "Schools Enrollment", href: "#", icon: UserGroupIcon, show: isGM, isDropdown: true, dropdownKey: "enrollment" },
-    { name: "Theology Enrollment", href: "#", icon: AcademicCapIcon, show: isGM, isDropdown: true, dropdownKey: "theology" },
-    { name: "P.7 Prep Tracking", href: "#", icon: AcademicCapIcon, show: isGM, isDropdown: true, dropdownKey: "p7prep" },
+    { name: "Schools Enrollment", href: "#", icon: UserGroupIcon, show: true, isDropdown: true, dropdownKey: "enrollment" },
+    { name: "Theology Enrollment", href: "#", icon: AcademicCapIcon, show: true, isDropdown: true, dropdownKey: "theology" },
+    { name: "P.7 Prep Tracking", href: "#", icon: AcademicCapIcon, show: true, isDropdown: true, dropdownKey: "p7prep" },
     { name: "Analytics", href: "/analytics", icon: ChartBarIcon, show: true },
     { name: "Past Reports", href: "/past-reports", icon: ClockIcon, show: true },
+    { name: "Trustee Hub", href: "#", icon: SparklesIcon, show: isTrustee, isDropdown: true, dropdownKey: "trusteeHub" },
+    { name: "Comments Report", href: "/comments-report", icon: ChatBubbleLeftRightIcon, show: true },
     { name: "Settings", href: "/settings", icon: UserCircleIcon, show: isGM },
   ];
 
@@ -171,19 +175,40 @@ export default function DashboardLayout({
     { name: "Scorecard Entry", href: "/scorecard-entry", icon: ChartPieIcon },
   ];
 
-  const theologySections = [
+  // Theology sections - showing only entry for GM, only analysis for Trustee
+  const theologySections = isGM ? [
     { name: "Theology Enrollment Tracking", href: "/theology-enrollment-entry", icon: DocumentPlusIcon, description: "Enter enrollment numbers for each school by class and term" },
+    { name: "Theology Enrollment Analysis", href: "/theology-analysis", icon: ChartBarIcon, description: "Detailed trends, comparisons, and variance analysis" },
+  ] : [
     { name: "Theology Enrollment Analysis", href: "/theology-analysis", icon: ChartBarIcon, description: "Detailed trends, comparisons, and variance analysis" },
   ];
 
-  const enrollmentSections = [
+  // Enrollment sections - showing only entry for GM, only analysis for Trustee
+  const enrollmentSections = isGM ? [
     { name: "Enrollment Tracking", href: "/enrollment-entry", icon: DocumentPlusIcon, description: "Enter enrollment numbers for each school by class and term" },
+    { name: "Enrollment Analysis", href: "/enrollment-analysis", icon: ChartBarIcon, description: "Detailed trends, comparisons, and variance analysis" },
+  ] : [
     { name: "Enrollment Analysis", href: "/enrollment-analysis", icon: ChartBarIcon, description: "Detailed trends, comparisons, and variance analysis" },
   ];
 
-  const p7PrepSections = [
+  // P.7 Prep sections - showing only entry for GM, only analysis for Trustee
+  const p7PrepSections = isGM ? [
     { name: "P.7 Prep Results Tracking", href: "/p7-prep-entry", icon: DocumentPlusIcon, description: "Enter division results and average scores for each prep exam" },
     { name: "P.7 Prep Analysis", href: "/p7-prep-analysis", icon: ChartBarIcon, description: "Prep trends, school rankings, and performance analysis" },
+  ] : [
+    { name: "P.7 Prep Analysis", href: "/p7-prep-analysis", icon: ChartBarIcon, description: "Prep trends, school rankings, and performance analysis" },
+  ];
+
+  // Trustee Hub sections
+  const trusteeHubSections = [
+    { name: "Executive Dashboard", href: "/trustee-dashboard", icon: ChartBarIcon, description: "High-level overview and key metrics" },
+    { name: "School Performance Scorecard", href: "/trustee-scorecard", icon: SparklesIcon, description: "Rankings and school-by-school analysis" },
+    { name: "Financial Overview", href: "/trustee-financial", icon: CurrencyDollarIcon, description: "Consolidated financial view and cash flows" },
+    { name: "Board Meeting Reports", href: "/trustee-board-reports", icon: DocumentPlusIcon, description: "Generate formatted reports for board meetings" },
+    { name: "Comparative Analysis", href: "/trustee-analysis", icon: ChartBarIcon, description: "School vs school comparisons and benchmarking" },
+    { name: "Goals & Targets", href: "/trustee-goals", icon: RocketLaunchIcon, description: "Organizational goals and progress tracking" },
+    { name: "Issues Dashboard", href: "/trustee-issues", icon: ExclamationTriangleIcon, description: "Critical issues and action items" },
+    { name: "Export Center", href: "/trustee-export", icon: DocumentPlusIcon, description: "Bulk export and custom reports" },
   ];
 
   const handleSignOut = () => {
@@ -331,13 +356,16 @@ export default function DashboardLayout({
                           setTheologyOpen(!theologyOpen);
                         } else if (item.dropdownKey === "p7prep") {
                           setP7PrepOpen(!p7prepOpen);
+                        } else if (item.dropdownKey === "trusteeHub") {
+                          setTrusteeHubOpen(!trusteeHubOpen);
                         }
                       }}
                       className={`w-full group flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                         (item.dropdownKey === "updateReport" && pathname.includes("-entry")) ||
                         (item.dropdownKey === "enrollment" && pathname.includes("enrollment") && !pathname.includes("theology")) ||
                         (item.dropdownKey === "theology" && pathname.includes("theology")) ||
-                        (item.dropdownKey === "p7prep" && pathname.includes("p7-prep"))
+                        (item.dropdownKey === "p7prep" && pathname.includes("p7-prep")) ||
+                        (item.dropdownKey === "trusteeHub" && pathname.includes("trustee-"))
                           ? "bg-blue-50 text-blue-700"
                           : "text-gray-700 hover:bg-gray-100"
                       }`}
@@ -349,7 +377,8 @@ export default function DashboardLayout({
                       {((item.dropdownKey === "updateReport" && updateReportOpen) || 
                         (item.dropdownKey === "enrollment" && enrollmentOpen) ||
                         (item.dropdownKey === "theology" && theologyOpen) ||
-                        (item.dropdownKey === "p7prep" && p7prepOpen)) ? (
+                        (item.dropdownKey === "p7prep" && p7prepOpen) ||
+                        (item.dropdownKey === "trusteeHub" && trusteeHubOpen)) ? (
                         <ChevronUpIcon className="h-4 w-4" />
                       ) : (
                         <ChevronDownIcon className="h-4 w-4" />
@@ -407,6 +436,22 @@ export default function DashboardLayout({
                     {item.dropdownKey === "p7prep" && p7prepOpen && (
                       <div className="ml-8 space-y-1">
                         {p7PrepSections.map((section) => (
+                          <Link
+                            key={section.name}
+                            href={section.href}
+                            onClick={() => setSidebarOpen(false)}
+                            className="group flex items-center px-3 py-2 text-sm font-medium rounded-lg text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+                          >
+                            <section.icon className="mr-2 h-4 w-4" />
+                            <span className="text-xs">{section.name}</span>
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+
+                    {item.dropdownKey === "trusteeHub" && trusteeHubOpen && (
+                      <div className="ml-8 space-y-1">
+                        {trusteeHubSections.map((section) => (
                           <Link
                             key={section.name}
                             href={section.href}

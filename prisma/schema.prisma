@@ -65,6 +65,7 @@ model WeeklyReport {
   weekEndDate         DateTime
   publishedAt         DateTime?
   isDraft             Boolean  @default(true)
+  generalManager      String?  // Name of the GM who submitted the report
   
   // KPI Data
   feesCollectionPercent     Float @default(0)
@@ -79,6 +80,7 @@ model WeeklyReport {
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
   reactions Reaction[]
+  comments  Comment[]
 
     @@unique([weekNumber, year, term])
     @@index([year, term, weekNumber])
@@ -385,4 +387,77 @@ model TermSetting {
   @@unique([term, year])
   @@index([year, term])
   @@index([startDate])
+}
+
+// Organizational Goals and Targets
+model OrganizationalGoal {
+  id            String   @id @default(cuid())
+  title         String   // e.g., "Increase Enrollment to 5000", "Achieve 95% Fee Collection"
+  description   String?  @db.Text
+  category      String   // "enrollment", "financial", "academic", "infrastructure"
+  targetValue   Float    // Target number
+  currentValue  Float    @default(0)
+  unit          String   // "%", "students", "currency", etc.
+  year          Int
+  term          Int?     // Optional - can be annual or per-term
+  progress      Float    @default(0) // 0-100 percentage
+  status        String   @default("in-progress") // "not-started", "in-progress", "completed", "missed"
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([year, term])
+  @@index([category])
+  @@index([status])
+}
+
+// Alert Configuration and History
+model AlertConfig {
+  id              String   @id @default(cuid())
+  name            String
+  type            String   // "enrollment_drop", "fee_collection", "academic_performance", "financial_variance"
+  threshold       Float    // Value at which alert triggers
+  operator        String   // "below", "above", "equals", "change_percent"
+  isActive        Boolean  @default(true)
+  recipients      String   @default("all") // "all", "specific_gm", "specific_school"
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([type])
+  @@index([isActive])
+}
+
+model AlertHistory {
+  id              String   @id @default(cuid())
+  configId        String
+  school          String?
+  metric          String
+  expectedValue   Float
+  actualValue     Float
+  severity        String   @default("medium") // "low", "medium", "high", "critical"
+  message         String   @db.Text
+  isResolved      Boolean  @default(false)
+  resolvedAt      DateTime?
+  resolvedBy      String?
+  createdAt       DateTime @default(now())
+
+  @@index([configId])
+  @@index([school])
+  @@index([severity])
+  @@index([isResolved])
+  @@index([createdAt])
+}
+
+// Comment model for tracking detailed comments in weekly reports
+model Comment {
+  id        String   @id @default(cuid())
+  reportId  String
+  field     String   // Which field the comment is for (feesComment, expenditureComment, etc.)
+  text      String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  report    WeeklyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
+  @@index([field])
+  @@index([createdAt])
 }

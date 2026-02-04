@@ -187,6 +187,7 @@ export default function Dashboard() {
 	const [reports, setReports] = useState<WeeklyReport[]>([]);
 	const [scorecards, setScorecards] = useState<WeeklyScorecard[]>([]);
 	const [p7Data, setP7Data] = useState<P7CohortData[]>([]);
+	const [p7PrepResults, setP7PrepResults] = useState<any[]>([]);
 	const [issues, setIssues] = useState<RedIssue[]>([]);
 	const [events, setEvents] = useState<UpcomingEvent[]>([]);
 	const [projects, setProjects] = useState<GMProject[]>([]);
@@ -196,6 +197,8 @@ export default function Dashboard() {
 	const [previousTheologyEnrollments, setPreviousTheologyEnrollments] = useState<any[]>([]);
 	const [enrollments, setEnrollments] = useState<any[]>([]);
 	const [previousEnrollments, setPreviousEnrollments] = useState<any[]>([]);
+	const [allEnrollments, setAllEnrollments] = useState<any[]>([]); // For chart trends
+	const [allTheologyEnrollments, setAllTheologyEnrollments] = useState<any[]>([]); // For chart trends
 	const [reactions, setReactions] = useState<Reaction[]>([]);
 	const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
 	const [postingReaction, setPostingReaction] = useState<Record<string, boolean>>({});
@@ -280,21 +283,22 @@ export default function Dashboard() {
 				term: String(prevTerm),
 			});
 
-			const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sourcesRes, incomesRes, theologyRes, previousTheologyRes, enrollmentRes, previousEnrollmentRes, reactionsRes, todosRes] = await Promise.all([
-				fetch("/api/reports"),
-				fetch(`/api/scorecard?${scorecardsParams.toString()}`),
-				fetch("/api/p7-prep"),
-				fetch("/api/issues"),
-				fetch("/api/events"),
-				fetch("/api/projects"),
-				fetch("/api/income-sources"),
-				fetch("/api/other-income"),
-				fetch(`/api/theology-enrollment?${theologyParams.toString()}`),
-				fetch(`/api/theology-enrollment?${previousTheologyParams.toString()}`),
-				fetch(`/api/enrollment?${enrollmentParams.toString()}`),
-				fetch(`/api/enrollment?${previousEnrollmentParams.toString()}`),
-				fetch("/api/reactions"),
-				fetch("/api/todos"),
+const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sourcesRes, incomesRes, theologyRes, previousTheologyRes, enrollmentRes, previousEnrollmentRes, reactionsRes, todosRes, p7PrepRes] = await Promise.all([
+			fetch("/api/reports"),
+			fetch(`/api/scorecard?${scorecardsParams.toString()}`),
+			fetch("/api/p7-prep"),
+			fetch("/api/issues"),
+			fetch("/api/events"),
+			fetch("/api/projects"),
+			fetch("/api/income-sources"),
+			fetch("/api/other-income"),
+			fetch(`/api/theology-enrollment?${theologyParams.toString()}`),
+			fetch(`/api/theology-enrollment?${previousTheologyParams.toString()}`),
+			fetch(`/api/enrollment?${enrollmentParams.toString()}`),
+			fetch(`/api/enrollment?${previousEnrollmentParams.toString()}`),
+			fetch("/api/reactions"),
+			fetch("/api/todos"),
+			fetch("/api/p7-prep-results"),
 			]);
 
 			if (!reportsRes.ok) throw new Error("Failed to fetch reports");
@@ -305,6 +309,7 @@ export default function Dashboard() {
 			const reportsData = await reportsRes.json();
 			const scorecardsData = await scorecardsRes.json();
 			const p7ResponseData = await p7Res.json();
+			const p7PrepData = p7PrepRes.ok ? await p7PrepRes.json() : [];
 			const issuesData = await issuesRes.json();
 			const eventsData = eventsRes.ok ? await eventsRes.json() : { data: [] };
 			const projectsData = projectsRes.ok ? await projectsRes.json() : { data: [] };
@@ -350,6 +355,7 @@ export default function Dashboard() {
 				}));
 				setScorecards(normalizedScorecards);
 				setP7Data(Array.isArray(p7ResponseData) ? p7ResponseData : p7ResponseData.data || []);
+			setP7PrepResults(Array.isArray(p7PrepData) ? p7PrepData : p7PrepData.data || []);
 				setIssues(Array.isArray(issuesData) ? issuesData : issuesData.data || []);
 				setEvents(Array.isArray(eventsData) ? eventsData : eventsData.data || []);
 				setProjects(Array.isArray(projectsData) ? projectsData : (projectsData.data || []));
@@ -371,6 +377,28 @@ export default function Dashboard() {
 
 		fetchData();
 	}, [selectedYear, selectedTerm]);
+
+	// Fetch chart trend data separately (not affected by year/term filters)
+	useEffect(() => {
+		const fetchTrendData = async () => {
+			try {
+				const [allEnrollmentRes, allTheologyRes] = await Promise.all([
+					fetch("/api/enrollment"),
+					fetch("/api/theology-enrollment"),
+				]);
+
+				const allEnrollmentData = allEnrollmentRes.ok ? await allEnrollmentRes.json() : [];
+				const allTheologyData = allTheologyRes.ok ? await allTheologyRes.json() : [];
+
+				setAllEnrollments(Array.isArray(allEnrollmentData) ? allEnrollmentData : []);
+				setAllTheologyEnrollments(Array.isArray(allTheologyData) ? allTheologyData : []);
+			} catch (err) {
+				console.error("Failed to fetch trend data:", err);
+			}
+		};
+
+		fetchTrendData();
+	}, []); // Only fetch once on mount
 
 	useEffect(() => {
 		if (selectionInitialized) return;
@@ -659,48 +687,104 @@ export default function Dashboard() {
 		}
 		
 		return years.map(year => {
-			const yearReports = reports.filter(r => r.year === year);
+			// Get all enrollment records for this year
+			const yearEnrollments = allEnrollments.filter(e => e.year === year);
+			const yearTheologyEnrollments = allTheologyEnrollments.filter(e => e.year === year);
 			
-			if (yearReports.length === 0) {
-				return {
-					year: year.toString(),
-					enrollment: 0,
-					theology: 0,
-					isFuture: year > currentYear,
-				};
+			// Sum enrollment across ALL TERMS and ALL SCHOOLS for this year
+			const totalEnrollment = yearEnrollments.reduce((sum, e) => sum + (e.count || 0), 0);
+			const totalTheology = yearTheologyEnrollments.reduce((sum, e) => sum + (e.count || 0), 0);
+			
+			// If no data for this year, check WeeklyReport as fallback
+			if (totalEnrollment === 0) {
+				const yearReports = reports.filter(r => r.year === year);
+				
+				if (yearReports.length === 0) {
+					return {
+						year: year.toString(),
+						enrollment: 0,
+						theology: 0,
+						isFuture: year > currentYear,
+					};
+				}
+				
+				// For years >= 2026, show latest value from reports
+				// For past years, show average enrollment from reports
+				if (year >= 2026) {
+					const sortedReports = yearReports.sort((a, b) => {
+						const termDiff = (b.term ?? 1) - (a.term ?? 1);
+						if (termDiff !== 0) return termDiff;
+						return b.weekNumber - a.weekNumber;
+					});
+					const latestReport = sortedReports[0];
+					return {
+						year: year.toString(),
+						enrollment: latestReport.totalEnrollment,
+						theology: latestReport.theologyEnrollment,
+						isFuture: false,
+					};
+				} else {
+					// For past years (2020-2025), calculate average from reports
+					const totalEnrollmentReports = yearReports.reduce((sum, r) => sum + r.totalEnrollment, 0);
+					const totalTheologyReports = yearReports.reduce((sum, r) => sum + r.theologyEnrollment, 0);
+					return {
+						year: year.toString(),
+						enrollment: Math.round(totalEnrollmentReports / yearReports.length),
+						theology: Math.round(totalTheologyReports / yearReports.length),
+						isFuture: false,
+					};
+				}
 			}
 			
-			// For years >= 2026, enrollment keeps changing, so show latest value
-			// For past years, show average enrollment
-			if (year >= 2026) {
-				// Get the most recent week's enrollment for current/future years
-				const sortedReports = yearReports.sort((a, b) => {
-					const termDiff = (b.term ?? 1) - (a.term ?? 1);
-					if (termDiff !== 0) return termDiff;
-					return b.weekNumber - a.weekNumber;
-				});
-				const latestReport = sortedReports[0];
-				return {
-					year: year.toString(),
-					enrollment: latestReport.totalEnrollment,
-					theology: latestReport.theologyEnrollment,
-					isFuture: false,
-				};
-			} else {
-				// For past years (2020-2025), calculate average
-				const totalEnrollment = yearReports.reduce((sum, r) => sum + r.totalEnrollment, 0);
-				const totalTheology = yearReports.reduce((sum, r) => sum + r.theologyEnrollment, 0);
-				return {
-					year: year.toString(),
-					enrollment: Math.round(totalEnrollment / yearReports.length),
-					theology: Math.round(totalTheology / yearReports.length),
-					isFuture: false,
-				};
-			}
+			// Use data from Enrollment and TheologyEnrollment tables
+			return {
+				year: year.toString(),
+				enrollment: totalEnrollment,
+				theology: totalTheology,
+				isFuture: false,
+			};
 		});
-	}, [reports]);
+	}, [reports, allEnrollments, allTheologyEnrollments, currentYear]);
 
 	const p7ChartData = useMemo(() => {
+		// Use new P7 prep results data if available, otherwise fall back to old data
+		if (p7PrepResults && p7PrepResults.length > 0) {
+			const yearPrepMap = new Map<number, Map<number, { enrollment: number; weightedScore: number }>>();
+			
+			p7PrepResults.forEach((result: any) => {
+				if (!yearPrepMap.has(result.year)) {
+					yearPrepMap.set(result.year, new Map());
+				}
+				const prepMap = yearPrepMap.get(result.year)!;
+				const key = result.prepNumber;
+				const existing = prepMap.get(key) || { enrollment: 0, weightedScore: 0 };
+				existing.enrollment += result.enrollment || 0;
+				existing.weightedScore += (result.averageScore || 0) * (result.enrollment || 0);
+				prepMap.set(key, existing);
+			});
+
+			const sorted = Array.from(yearPrepMap.entries())
+				.sort((a, b) => a[0] - b[0])
+				.map(([year, prepMap]) => {
+					const data: any = { year };
+					for (let prep = 1; prep <= 9; prep++) {
+						const prepData = prepMap.get(prep);
+						// Show weighted average performance (API) for that prep
+						if (prepData && prepData.enrollment > 0) {
+							data[`Prep ${prep}`] = Math.round((prepData.weightedScore / prepData.enrollment) * 10) / 10;
+						} else {
+							data[`Prep ${prep}`] = 0;
+						}
+					}
+					return data;
+				});
+
+			const years = Array.from(yearPrepMap.keys()).sort((a, b) => a - b);
+			const windowYears = years.slice(Math.max(0, years.length - p7YearsWindow));
+			return sorted.filter(d => windowYears.includes(d.year));
+		}
+
+		// Fall back to old data
 		const sorted = [...p7Data].sort((a, b) => a.year - b.year);
 		const years = Array.from(new Set(sorted.map(d => d.year))).sort((a, b) => a - b);
 		const windowYears = years.slice(Math.max(0, years.length - p7YearsWindow));
@@ -720,7 +804,7 @@ export default function Dashboard() {
 				"Prep 9": d.prep9,
 				PLE: d.ple,
 			}));
-	}, [p7Data, p7YearsWindow]);
+	}, [p7Data, p7PrepResults, p7YearsWindow]);
 
 	const p7TableData = useMemo(() => {
 		const sorted = [...p7Data].sort((a, b) => a.year - b.year);
@@ -1614,14 +1698,15 @@ export default function Dashboard() {
 							<Tooltip />
 							<Legend />
 							<Line type="monotone" dataKey="enrollment" stroke="#3b82f6" strokeWidth={2} name="Total Enrollment" />
+							<Line type="monotone" dataKey="theology" stroke="#8b5cf6" strokeWidth={2} name="Theology Enrollment" />
 						</LineChart>
 					</ResponsiveContainer>
 				</div>
 
 				<div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-8">
-					<div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+					<div className="flex items-center justify-between mb-4">
 						<div>
-							<h3 className="text-lg font-semibold text-gray-900">P.7 PREP EXAMS</h3>
+							<h3 className="text-lg font-semibold text-gray-900">P.7 Preparation Performance</h3>
 							<p className="text-sm text-gray-600">Chart compares prep milestones; table shows last 3 years.</p>
 						</div>
 						<div className="flex items-center gap-2">

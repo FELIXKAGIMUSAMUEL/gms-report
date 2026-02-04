@@ -56,6 +56,14 @@ export default function P7PrepEntryPage() {
     averageScore: 0,
   });
 
+  // Helper function to determine term based on prep number
+  const getTermFromPrep = (prepNumber: number): number => {
+    if (prepNumber >= 1 && prepNumber <= 3) return 1;
+    if (prepNumber >= 4 && prepNumber <= 6) return 2;
+    if (prepNumber >= 7 && prepNumber <= 9) return 3;
+    return 1; // Default to term 1
+  };
+
   // Local editing state: { "SCHOOL:PREP": data }
   const [editingData, setEditingData] = useState<Record<string, P7PrepResult>>({});
 
@@ -133,20 +141,30 @@ export default function P7PrepEntryPage() {
     setError(null);
 
     try {
+      const averageScore = calculateAverageScore(
+        currentEntryData.divisionI,
+        currentEntryData.divisionII,
+        currentEntryData.divisionIII,
+        currentEntryData.divisionIV
+      );
+
+      // Automatically determine term based on prep number
+      const autoTerm = getTermFromPrep(selectedPrep);
+
       const response = await fetch("/api/p7-prep-results", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           school: selectedSchool,
           prepNumber: selectedPrep,
-          term: selectedTerm,
+          term: autoTerm,
           year: selectedYear,
           enrollment: currentEntryData.enrollment,
           divisionI: currentEntryData.divisionI,
           divisionII: currentEntryData.divisionII,
           divisionIII: currentEntryData.divisionIII,
           divisionIV: currentEntryData.divisionIV,
-          averageScore: currentEntryData.averageScore,
+          averageScore,
         }),
       });
 
@@ -252,16 +270,21 @@ export default function P7PrepEntryPage() {
   };
 
   const handleDownloadTemplate = () => {
-    const templateData = PREP_NUMBERS.map(prep => ({
-      School: "SAMPLE_SCHOOL",
-      Prep: prep,
-      Enrollment: 0,
-      "Division I": 0,
-      "Division II": 0,
-      "Division III": 0,
-      "Division IV": 0,
-      "Average Score": 0,
-    }));
+    // Generate rows for all schools for each prep number
+    const templateData: any[] = [];
+    PREP_NUMBERS.forEach(prep => {
+      schools.forEach(school => {
+        templateData.push({
+          School: school,
+          Prep: prep,
+          Enrollment: 0,
+          "Division I": 0,
+          "Division II": 0,
+          "Division III": 0,
+          "Division IV": 0,
+        });
+      });
+    });
 
     const ws = XLSX.utils.json_to_sheet(templateData);
     ws['!cols'] = [
@@ -272,7 +295,6 @@ export default function P7PrepEntryPage() {
       { wch: 12 },
       { wch: 12 },
       { wch: 12 },
-      { wch: 14 },
     ];
 
     const wb = XLSX.utils.book_new();
@@ -298,26 +320,36 @@ export default function P7PrepEntryPage() {
       }
 
       let savedCount = 0;
-      for (const row: any of jsonData) {
+      for (const row of jsonData as any[]) {
         const school = row.School || row.SCHOOL || row.school;
         const prep = row.Prep || row.PREP || row.prep;
 
         if (!school || prep === undefined) continue;
+
+        const prepNumber = parseInt(prep);
+        const divisionI = parseInt(row["Division I"] || 0);
+        const divisionII = parseInt(row["Division II"] || 0);
+        const divisionIII = parseInt(row["Division III"] || 0);
+        const divisionIV = parseInt(row["Division IV"] || 0);
+        const averageScore = calculateAverageScore(divisionI, divisionII, divisionIII, divisionIV);
+
+        // Automatically determine term based on prep number
+        const autoTerm = getTermFromPrep(prepNumber);
 
         const response = await fetch("/api/p7-prep-results", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             school,
-            prepNumber: parseInt(prep),
-            term: selectedTerm,
+            prepNumber,
+            term: autoTerm,
             year: selectedYear,
             enrollment: parseInt(row.Enrollment || 0),
-            divisionI: parseInt(row["Division I"] || 0),
-            divisionII: parseInt(row["Division II"] || 0),
-            divisionIII: parseInt(row["Division III"] || 0),
-            divisionIV: parseInt(row["Division IV"] || 0),
-            averageScore: parseFloat(row["Average Score"] || 0),
+            divisionI,
+            divisionII,
+            divisionIII,
+            divisionIV,
+            averageScore,
           }),
         });
 
@@ -354,7 +386,6 @@ export default function P7PrepEntryPage() {
       "Division II": result.divisionII,
       "Division III": result.divisionIII,
       "Division IV": result.divisionIV,
-      "Average Score": result.averageScore.toFixed(1),
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
@@ -366,7 +397,6 @@ export default function P7PrepEntryPage() {
       { wch: 12 },
       { wch: 12 },
       { wch: 12 },
-      { wch: 14 },
     ];
 
     const wb = XLSX.utils.book_new();
@@ -374,11 +404,36 @@ export default function P7PrepEntryPage() {
     XLSX.writeFile(wb, `P7_Prep_Results_Term${selectedTerm}_${selectedYear}.xlsx`);
   };
 
+  const calculateAverageScore = (
+    divisionI: number,
+    divisionII: number,
+    divisionIII: number,
+    divisionIV: number
+  ) => {
+    const total = divisionI + divisionII + divisionIII + divisionIV;
+    if (total === 0) return 0;
+    const weighted = (divisionI * 4) + (divisionII * 3) + (divisionIII * 2) + (divisionIV * 1);
+    return Number(((weighted / total) * 25).toFixed(1));
+  };
+
   // Calculate division percentages
   const getDivisionPercentage = (division: number, total: number) => {
     if (total === 0) return 0;
     return ((division / total) * 100).toFixed(1);
   };
+
+  const computedAverageScore = calculateAverageScore(
+    currentEntryData.divisionI,
+    currentEntryData.divisionII,
+    currentEntryData.divisionIII,
+    currentEntryData.divisionIV
+  );
+
+  const prepsForSelectedTerm = selectedTerm === 1
+    ? [1, 2, 3]
+    : selectedTerm === 2
+      ? [4, 5, 6]
+      : [7, 8, 9];
 
   if (status === "loading") {
     return (
@@ -404,7 +459,7 @@ export default function P7PrepEntryPage() {
 
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">P.7 Prep Exam Results Tracking</h1>
-          <p className="text-gray-600 mt-2">Enter division results and average scores for each prep exam</p>
+          <p className="text-gray-600 mt-2">Enter division results for each prep exam (average score is calculated automatically)</p>
         </div>
 
         {/* Import Section */}
@@ -649,57 +704,70 @@ export default function P7PrepEntryPage() {
               </button>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-100 border-b-2 border-gray-300">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">School</th>
-                    <th className="px-3 py-3 text-center font-semibold text-gray-700 border-l border-gray-300">Prep</th>
-                    <th className="px-3 py-3 text-center font-semibold text-gray-700 border-l border-gray-300">Enrollment</th>
-                    <th className="px-3 py-3 text-center font-semibold text-gray-700 border-l border-gray-300">Div I</th>
-                    <th className="px-3 py-3 text-center font-semibold text-gray-700 border-l border-gray-300">Div II</th>
-                    <th className="px-3 py-3 text-center font-semibold text-gray-700 border-l border-gray-300">Div III</th>
-                    <th className="px-3 py-3 text-center font-semibold text-gray-700 border-l border-gray-300">Div IV</th>
-                    <th className="px-3 py-3 text-center font-semibold text-gray-700 border-l border-gray-300">Avg Score</th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700 border-l border-gray-300">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {Object.values(editingData).sort((a, b) => {
-                    if (a.school !== b.school) return a.school.localeCompare(b.school);
-                    return a.prepNumber - b.prepNumber;
-                  }).map(result => (
-                    <tr key={`${result.school}-${result.prepNumber}`} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 font-semibold text-gray-900">{result.school}</td>
-                      <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.prepNumber}</td>
-                      <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.enrollment}</td>
-                      <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.divisionI}</td>
-                      <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.divisionII}</td>
-                      <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.divisionIII}</td>
-                      <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.divisionIV}</td>
-                      <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700 font-semibold">{result.averageScore.toFixed(1)}</td>
-                      <td className="px-4 py-3 text-center border-l border-gray-300">
-                        <div className="flex items-center justify-center gap-2">
-                          <button
-                            onClick={() => handleEditEntry(result.school, result.prepNumber)}
-                            className="text-blue-600 hover:text-blue-800"
-                            title="Edit"
-                          >
-                            <PencilSquareIcon className="w-5 h-5" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteEntry(result.school, result.prepNumber)}
-                            className="text-red-600 hover:text-red-800"
-                            title="Delete"
-                          >
-                            <TrashIcon className="w-5 h-5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="space-y-6">
+              {prepsForSelectedTerm.map(prepNumber => {
+                const prepResults = Object.values(editingData)
+                  .filter(result => result.prepNumber === prepNumber)
+                  .sort((a, b) => a.school.localeCompare(b.school));
+
+                if (prepResults.length === 0) return null;
+
+                return (
+                  <div key={`prep-${prepNumber}`} className="border border-gray-200 rounded-lg overflow-hidden">
+                    <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-gray-800">Prep {prepNumber} Results</h3>
+                      <span className="text-xs text-gray-500">{prepResults.length} schools</span>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-100 border-b-2 border-gray-300">
+                          <tr>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-700">School</th>
+                            <th className="px-3 py-3 text-center font-semibold text-gray-700 border-l border-gray-300">Enrollment</th>
+                            <th className="px-3 py-3 text-center font-semibold text-gray-700 border-l border-gray-300">Div I</th>
+                            <th className="px-3 py-3 text-center font-semibold text-gray-700 border-l border-gray-300">Div II</th>
+                            <th className="px-3 py-3 text-center font-semibold text-gray-700 border-l border-gray-300">Div III</th>
+                            <th className="px-3 py-3 text-center font-semibold text-gray-700 border-l border-gray-300">Div IV</th>
+                            <th className="px-3 py-3 text-center font-semibold text-gray-700 border-l border-gray-300">Avg Score</th>
+                            <th className="px-4 py-3 text-center font-semibold text-gray-700 border-l border-gray-300">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {prepResults.map(result => (
+                            <tr key={`${result.school}-${result.prepNumber}`} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 font-semibold text-gray-900">{result.school}</td>
+                              <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.enrollment}</td>
+                              <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.divisionI}</td>
+                              <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.divisionII}</td>
+                              <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.divisionIII}</td>
+                              <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.divisionIV}</td>
+                              <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700 font-semibold">{result.averageScore.toFixed(1)}</td>
+                              <td className="px-4 py-3 text-center border-l border-gray-300">
+                                <div className="flex items-center justify-center gap-2">
+                                  <button
+                                    onClick={() => handleEditEntry(result.school, result.prepNumber)}
+                                    className="text-blue-600 hover:text-blue-800"
+                                    title="Edit"
+                                  >
+                                    <PencilSquareIcon className="w-5 h-5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteEntry(result.school, result.prepNumber)}
+                                    className="text-red-600 hover:text-red-800"
+                                    title="Delete"
+                                  >
+                                    <TrashIcon className="w-5 h-5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
