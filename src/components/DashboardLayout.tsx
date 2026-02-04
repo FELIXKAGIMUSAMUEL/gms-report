@@ -536,13 +536,16 @@ export default function DashboardLayout({
                               setTheologyOpen(!theologyOpen);
                             } else if (item.dropdownKey === "p7prep") {
                               setP7PrepOpen(!p7prepOpen);
+                            } else if (item.dropdownKey === "trusteeHub") {
+                              setTrusteeHubOpen(!trusteeHubOpen);
                             }
                           }}
                           className={`w-full group flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
                             (item.dropdownKey === "updateReport" && pathname.includes("-entry")) ||
                             (item.dropdownKey === "enrollment" && pathname.includes("enrollment") && !pathname.includes("theology")) ||
                             (item.dropdownKey === "theology" && pathname.includes("theology")) ||
-                            (item.dropdownKey === "p7prep" && pathname.includes("p7-prep"))
+                            (item.dropdownKey === "p7prep" && pathname.includes("p7-prep")) ||
+                            (item.dropdownKey === "trusteeHub" && pathname.includes("trustee-"))
                               ? "bg-blue-50 text-blue-700 shadow-sm"
                               : "text-gray-700 hover:bg-gray-50 hover:text-blue-600"
                           }`}
@@ -552,7 +555,8 @@ export default function DashboardLayout({
                               (item.dropdownKey === "updateReport" && pathname.includes("-entry")) ||
                               (item.dropdownKey === "enrollment" && pathname.includes("enrollment") && !pathname.includes("theology")) ||
                               (item.dropdownKey === "theology" && pathname.includes("theology")) ||
-                              (item.dropdownKey === "p7prep" && pathname.includes("p7-prep"))
+                              (item.dropdownKey === "p7prep" && pathname.includes("p7-prep")) ||
+                              (item.dropdownKey === "trusteeHub" && pathname.includes("trustee-"))
                                 ? "text-blue-600" 
                                 : "text-gray-400"
                             }`} />
@@ -561,7 +565,8 @@ export default function DashboardLayout({
                           {((item.dropdownKey === "updateReport" && updateReportOpen) || 
                             (item.dropdownKey === "enrollment" && enrollmentOpen) ||
                             (item.dropdownKey === "theology" && theologyOpen) ||
-                            (item.dropdownKey === "p7prep" && p7prepOpen)) ? (
+                            (item.dropdownKey === "p7prep" && p7prepOpen) ||
+                            (item.dropdownKey === "trusteeHub" && trusteeHubOpen)) ? (
                             <ChevronUpIcon className="h-4 w-4" />
                           ) : (
                             <ChevronDownIcon className="h-4 w-4" />
@@ -616,6 +621,21 @@ export default function DashboardLayout({
                         {item.dropdownKey === "p7prep" && p7prepOpen && (
                           <div className="ml-8 space-y-1 mt-1">
                             {p7PrepSections.map((section) => (
+                              <Link
+                                key={section.name}
+                                href={section.href}
+                                className="group flex items-center px-3 py-2 text-sm font-medium rounded-lg text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+                              >
+                                <section.icon className="mr-2 h-4 w-4" />
+                                <span className="text-xs">{section.name}</span>
+                              </Link>
+                            ))}
+                          </div>
+                        )}
+
+                        {item.dropdownKey === "trusteeHub" && trusteeHubOpen && (
+                          <div className="ml-8 space-y-1 mt-1">
+                            {trusteeHubSections.map((section) => (
                               <Link
                                 key={section.name}
                                 href={section.href}
