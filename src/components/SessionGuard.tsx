@@ -2,14 +2,23 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter, usePathname } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 export function SessionGuard({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession();
   const router = useRouter();
   const pathname = usePathname();
+  const [isClient, setIsClient] = useState(false);
+
+  // Set client-side flag to avoid hydration mismatch
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   useEffect(() => {
+    // Only run on client side
+    if (!isClient) return;
+    
     // If session is loading, wait
     if (status === "loading") return;
 
@@ -26,9 +35,14 @@ export function SessionGuard({ children }: { children: React.ReactNode }) {
       router.push("/dashboard");
       return;
     }
-  }, [status, pathname, router]);
+  }, [status, pathname, router, isClient]);
 
-  // Show loading state while checking session
+  // During SSR or initial client render, just render children
+  if (!isClient) {
+    return <>{children}</>;
+  }
+
+  // Show loading state while checking session on client
   if (status === "loading") {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
