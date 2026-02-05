@@ -86,7 +86,7 @@ export default function TrusteeScorecard() {
     return "bg-red-50";
   };
 
-  const StatusBadge = ({ value, threshold = 70 }: { value: number; threshold?: number }) => {
+  const renderStatusBadge = (value: number) => {
     const color = getStatusColor(value);
     return (
       <div className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold ${
@@ -263,7 +263,7 @@ export default function TrusteeScorecard() {
           </div>
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-red-100 border border-red-300 rounded"></div>
-            <span className="text-gray-600">Needs Attention (<70)</span>
+            <span className="text-gray-600">Needs Attention (&lt;70)</span>
           </div>
         </div>
       </div>

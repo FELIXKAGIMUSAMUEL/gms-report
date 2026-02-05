@@ -41,6 +41,7 @@ export const authOptions: AuthOptions = {
       if (user) {
         token.id = user.id;
         token.role = user.role;
+        token.iat = Math.floor(Date.now() / 1000); // Issue time
       }
       return token;
     },
@@ -57,10 +58,11 @@ export const authOptions: AuthOptions = {
   },
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60,
+    maxAge: 2 * 60 * 60, // 2 hours - session expires after 2 hours
+    updateAge: 10 * 60, // 10 minutes - update session every 10 minutes of activity
   },
   jwt: {
-    maxAge: 30 * 24 * 60 * 60,
+    maxAge: 2 * 60 * 60, // 2 hours
   },
   secret: process.env.NEXTAUTH_SECRET,
 };

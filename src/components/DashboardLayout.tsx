@@ -4,6 +4,7 @@ import { useSession, signOut } from "next-auth/react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ReactNode, useState, useEffect, createContext, useContext, useCallback } from "react";
+import { useInactivityLogout } from "@/hooks/useInactivityLogout";
 
 // Filter Context
 interface FilterContextType {
@@ -147,6 +148,9 @@ export default function DashboardLayout({
   };
 
   const closeMessaging = () => setMessagingOpen(false);
+
+  // Auto-logout after 30 minutes of inactivity
+  useInactivityLogout(30);
 
   if (!session) return null;
 
