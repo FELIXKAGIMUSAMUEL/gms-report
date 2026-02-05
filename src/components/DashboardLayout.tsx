@@ -69,7 +69,7 @@ export default function DashboardLayout({
   setSelectedWeek: propSetSelectedWeek,
   showPeriodFilters = false
 }: LayoutProps) {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -83,6 +83,13 @@ export default function DashboardLayout({
   const [trusteeHubOpen, setTrusteeHubOpen] = useState(pathname.includes("trustee-"));
   const [messagingOpen, setMessagingOpen] = useState(false);
   const [unreadMessages, setUnreadMessages] = useState(0);
+
+  // Check session validity on mount and periodically
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.push("/login");
+    }
+  }, [status, router]);
   
   // Get current week
   const getCurrentWeek = () => {

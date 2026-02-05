@@ -4,11 +4,15 @@ import { NextResponse } from "next/server";
 export default withAuth(
   function middleware(req) {
     const token = req.nextauth.token;
-    const isAuth = !!token;
     const isAuthPage = req.nextUrl.pathname.startsWith("/login");
+    
+    // Check if token exists and is not expired
+    const now = Math.floor(Date.now() / 1000);
+    const tokenExpired = token?.exp && now > token.exp;
+    const isAuth = !!token && !tokenExpired;
 
-    // If not authenticated and trying to access protected page, redirect to login
-    if (!isAuth && !isAuthPage) {
+    // If not authenticated or token expired, redirect to login
+    if ((!isAuth || tokenExpired) && !isAuthPage) {
       return NextResponse.redirect(new URL("/login", req.url));
     }
 
@@ -21,7 +25,12 @@ export default withAuth(
   },
   {
     callbacks: {
-      authorized: ({ token }) => true, // Let the middleware function handle the logic
+      authorized: ({ token }) => {
+        // Check if token is valid and not expired
+        if (!token) return false;
+        const now = Math.floor(Date.now() / 1000);
+        return !token.exp || now < token.exp;
+      },
     },
   }
 );

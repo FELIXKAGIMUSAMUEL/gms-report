@@ -2,6 +2,7 @@
 
 import { SessionProvider } from "next-auth/react";
 import NotificationSystem from "@/components/NotificationSystem";
+import { SessionGuard } from "@/components/SessionGuard";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -10,8 +11,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
       refetchOnWindowFocus={true}
       refetchWhenOffline={false}
     >
-      <NotificationSystem />
-      {children}
+      <SessionGuard>
+        <NotificationSystem />
+        {children}
+      </SessionGuard>
     </SessionProvider>
   );
 }
