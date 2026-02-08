@@ -23,6 +23,8 @@ interface School {
 
 const CLASSES = ["KG1", "KG2", "KG3", "P.1", "P.2", "P.3", "P.4", "P.5", "P.6", "P.7"];
 const currentYear = new Date().getFullYear();
+const START_YEAR = 2023;
+const availableYears = Array.from({ length: currentYear - START_YEAR + 1 }, (_, i) => currentYear - i);
 
 export default function TheologyEnrollmentPage() {
   const { data: session, status } = useSession();
@@ -393,7 +395,7 @@ export default function TheologyEnrollmentPage() {
                 onChange={(e) => setSelectedYear(Number(e.target.value))}
                 className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                {[currentYear, currentYear - 1, currentYear - 2].map(y => (
+                {availableYears.map(y => (
                   <option key={y} value={y}>{y}</option>
                 ))}
               </select>

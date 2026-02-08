@@ -202,7 +202,13 @@ export default function Dashboard() {
 	const [reactions, setReactions] = useState<Reaction[]>([]);
 	const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
 	const [postingReaction, setPostingReaction] = useState<Record<string, boolean>>({});
-	const [p7YearsWindow, setP7YearsWindow] = useState<number>(4);
+	const [p7YearsWindow, setP7YearsWindow] = useState<number>(999); // Default to all years
+	const [p7ChartType, setP7ChartType] = useState<"line" | "bar">("line"); // Chart type toggle
+	const [enrollmentSchoolFilter, setEnrollmentSchoolFilter] = useState<string>("ALL"); // School filter for enrollment chart
+	const [enrollmentClassFilter, setEnrollmentClassFilter] = useState<string>("ALL"); // Class filter for enrollment chart
+	const [incomeYearFilter, setIncomeYearFilter] = useState<number | "ALL">("ALL"); // Year filter for income
+	const [incomeSourceFilter, setIncomeSourceFilter] = useState<string>("ALL"); // Source filter for income
+	const [incomeDisplayMode, setIncomeDisplayMode] = useState<"amount" | "percentage">("amount"); // Display mode for income
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [selectionInitialized, setSelectionInitialized] = useState(false);
@@ -298,7 +304,7 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 			fetch(`/api/enrollment?${previousEnrollmentParams.toString()}`),
 			fetch("/api/reactions"),
 			fetch("/api/todos"),
-			fetch("/api/p7-prep-results"),
+			fetch("/api/p7-prep-results", { cache: 'no-store' }),
 			]);
 
 			if (!reportsRes.ok) throw new Error("Failed to fetch reports");
@@ -687,9 +693,21 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 		}
 		
 		return years.map(year => {
-			// Get all enrollment records for this year
-			const yearEnrollments = allEnrollments.filter(e => e.year === year);
-			const yearTheologyEnrollments = allTheologyEnrollments.filter(e => e.year === year);
+			// Get all enrollment records for this year with filters applied
+			let yearEnrollments = allEnrollments.filter(e => e.year === year);
+			let yearTheologyEnrollments = allTheologyEnrollments.filter(e => e.year === year);
+			
+			// Apply school filter
+			if (enrollmentSchoolFilter !== "ALL") {
+				yearEnrollments = yearEnrollments.filter(e => e.school === enrollmentSchoolFilter);
+				yearTheologyEnrollments = yearTheologyEnrollments.filter(e => e.school === enrollmentSchoolFilter);
+			}
+			
+			// Apply class filter
+			if (enrollmentClassFilter !== "ALL") {
+				yearEnrollments = yearEnrollments.filter(e => e.class === enrollmentClassFilter);
+				yearTheologyEnrollments = yearTheologyEnrollments.filter(e => e.class === enrollmentClassFilter);
+			}
 			
 			// Sum enrollment across ALL TERMS and ALL SCHOOLS for this year
 			const totalEnrollment = yearEnrollments.reduce((sum, e) => sum + (e.count || 0), 0);
@@ -744,12 +762,12 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 				isFuture: false,
 			};
 		});
-	}, [reports, allEnrollments, allTheologyEnrollments, currentYear]);
+	}, [reports, allEnrollments, allTheologyEnrollments, currentYear, enrollmentSchoolFilter, enrollmentClassFilter]);
 
 	const p7ChartData = useMemo(() => {
 		// Use new P7 prep results data if available, otherwise fall back to old data
 		if (p7PrepResults && p7PrepResults.length > 0) {
-			const yearPrepMap = new Map<number, Map<number, { enrollment: number; weightedScore: number }>>();
+			const yearPrepMap = new Map<number, Map<number, { enrollment: number; divisionI: number }>>();
 			
 			p7PrepResults.forEach((result: any) => {
 				if (!yearPrepMap.has(result.year)) {
@@ -757,9 +775,9 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 				}
 				const prepMap = yearPrepMap.get(result.year)!;
 				const key = result.prepNumber;
-				const existing = prepMap.get(key) || { enrollment: 0, weightedScore: 0 };
+				const existing = prepMap.get(key) || { enrollment: 0, divisionI: 0 };
 				existing.enrollment += result.enrollment || 0;
-				existing.weightedScore += (result.averageScore || 0) * (result.enrollment || 0);
+				existing.divisionI += result.divisionI || 0;
 				prepMap.set(key, existing);
 			});
 
@@ -769,9 +787,9 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 					const data: any = { year };
 					for (let prep = 1; prep <= 9; prep++) {
 						const prepData = prepMap.get(prep);
-						// Show weighted average performance (API) for that prep
+						// Show Division 1 percentage for that prep
 						if (prepData && prepData.enrollment > 0) {
-							data[`Prep ${prep}`] = Math.round((prepData.weightedScore / prepData.enrollment) * 10) / 10;
+							data[`Prep ${prep}`] = Math.round((prepData.divisionI / prepData.enrollment) * 1000) / 10;
 						} else {
 							data[`Prep ${prep}`] = 0;
 						}
@@ -779,17 +797,19 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 					return data;
 				});
 
-			const years = Array.from(yearPrepMap.keys()).sort((a, b) => a - b);
-			const windowYears = years.slice(Math.max(0, years.length - p7YearsWindow));
-			return sorted.filter(d => windowYears.includes(d.year));
+			// Apply year window filter
+			if (p7YearsWindow === 999) {
+				return sorted; // All years
+			} else {
+				const years = Array.from(yearPrepMap.keys()).sort((a, b) => a - b);
+				const windowYears = years.slice(Math.max(0, years.length - p7YearsWindow));
+				return sorted.filter(d => windowYears.includes(d.year));
+			}
 		}
 
-		// Fall back to old data
+		// Fall back to old data - show all years
 		const sorted = [...p7Data].sort((a, b) => a.year - b.year);
-		const years = Array.from(new Set(sorted.map(d => d.year))).sort((a, b) => a - b);
-		const windowYears = years.slice(Math.max(0, years.length - p7YearsWindow));
 		return sorted
-			.filter(d => windowYears.includes(d.year))
 			.map(d => ({
 				year: d.year,
 				Promotion: d.p6Promotion,
@@ -807,34 +827,71 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 	}, [p7Data, p7PrepResults, p7YearsWindow]);
 
 	const p7TableData = useMemo(() => {
-		const sorted = [...p7Data].sort((a, b) => a.year - b.year);
+		// Use the same chart data to ensure consistency
+		const sorted = [...p7ChartData].sort((a, b) => a.year - b.year);
 		const years = Array.from(new Set(sorted.map(d => d.year))).sort((a, b) => a - b);
 		const last3Years = years.slice(Math.max(0, years.length - 3));
-		return sorted.filter(d => last3Years.includes(d.year));
-	}, [p7Data]);
+		const filtered = sorted.filter(d => last3Years.includes(d.year));
+		
+		// Transform to match table structure (add id and use correct property names)
+		return filtered.map((d, idx) => ({
+			id: `${d.year}-${idx}`,
+			year: d.year,
+			p6Promotion: d.Promotion || 0,
+			prep1: d["Prep 1"] || 0,
+			prep2: d["Prep 2"] || 0,
+			prep3: d["Prep 3"] || 0,
+			prep4: d["Prep 4"] || 0,
+			prep5: d["Prep 5"] || 0,
+			prep6: d["Prep 6"] || 0,
+			prep7: d["Prep 7"] || 0,
+			prep8: d["Prep 8"] || 0,
+			prep9: d["Prep 9"] || 0,
+			ple: d.PLE || 0,
+		}));
+	}, [p7ChartData]);
 
 	const incomeChartData = useMemo(() => {
-		const grouped = new Map<string, Map<number, number>>();
-		incomes.forEach(inc => {
+		// Apply filters
+		let filteredIncomes = incomes;
+		
+		if (incomeYearFilter !== "ALL") {
+			filteredIncomes = filteredIncomes.filter(inc => inc.year === incomeYearFilter);
+		}
+		
+		if (incomeSourceFilter !== "ALL") {
+			filteredIncomes = filteredIncomes.filter(inc => inc.source === incomeSourceFilter);
+		}
+		
+		const grouped = new Map<string, Map<number, { amount: number; percentage: number }>>();
+		filteredIncomes.forEach(inc => {
 			if (!grouped.has(inc.source)) {
 				grouped.set(inc.source, new Map());
 			}
 			const yearMap = grouped.get(inc.source)!;
-			yearMap.set(inc.year, (yearMap.get(inc.year) || 0) + inc.percentage);
+			const existing = yearMap.get(inc.year) || { amount: 0, percentage: 0 };
+			existing.amount += inc.amount || 0;
+			existing.percentage += inc.percentage || 0;
+			yearMap.set(inc.year, existing);
 		});
 
 		const allYears = new Set<number>();
-		incomes.forEach(inc => allYears.add(inc.year));
+		filteredIncomes.forEach(inc => allYears.add(inc.year));
 		const years = Array.from(allYears).sort((a, b) => a - b);
 
 		return Array.from(grouped.entries()).map(([source, yearMap]) => {
 			const item: Record<string, number | string> = { name: source };
 			years.forEach(year => {
-				item[`year_${year}`] = yearMap.get(year) || 0;
+				const data = yearMap.get(year);
+				if (incomeDisplayMode === "amount") {
+					item[`year_${year}`] = data?.amount || 0;
+				} else {
+					item[`year_${year}`] = data?.percentage || 0;
+				}
 			});
 				return item;
 		});
-	}, [incomes]);
+	}, [incomes, incomeYearFilter, incomeSourceFilter, incomeDisplayMode]);
 
 	const schoolRankings = useMemo(() => {
 		const schoolScores = new Map<string, { name: string; scores: number[] }>();
@@ -1626,19 +1683,67 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 			</div>
 
 			<div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-8">
-				<div className="flex items-center justify-between mb-4">
-					<div>
-						<h3 className="text-lg font-semibold text-gray-900">Enrollment Trends (2020 - {currentYear})</h3>
-						<p className="text-xs text-gray-500 mt-1">Showing average enrollment for past years (2020-2025) and latest enrollment from 2026 onwards (updates as data is entered).</p>
+				<div className="flex flex-col gap-4 mb-4">
+					<div className="flex items-center justify-between">
+						<div>
+							<h3 className="text-lg font-semibold text-gray-900">Enrollment Trends (2020 - {currentYear})</h3>
+							<p className="text-xs text-gray-500 mt-1">Showing average enrollment for past years (2020-2025) and latest enrollment from 2026 onwards (updates as data is entered).</p>
+						</div>
+						{userRole === "GM" && (
+							<button
+								onClick={() => setShowEnrollmentForm(!showEnrollmentForm)}
+								className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+							>
+								{showEnrollmentForm ? "Hide Form" : "Add Historical Data"}
+							</button>
+						)}
 					</div>
-					{userRole === "GM" && (
-						<button
-							onClick={() => setShowEnrollmentForm(!showEnrollmentForm)}
-							className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-						>
-							{showEnrollmentForm ? "Hide Form" : "Add Historical Data"}
-						</button>
-					)}
+					<div className="flex items-center gap-4">
+						<div className="flex items-center gap-2">
+							<span className="text-xs text-gray-600 font-medium">Filter by School:</span>
+							<select
+								value={enrollmentSchoolFilter}
+								onChange={(e) => setEnrollmentSchoolFilter(e.target.value)}
+								className="px-3 py-1.5 text-xs font-medium text-gray-900 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
+							>
+								<option value="ALL">All Schools</option>
+								{allEnrollments && allEnrollments.length > 0 && Array.from(new Set(allEnrollments.map(e => e.school))).sort().map(school => (
+									<option key={school} value={school}>{school}</option>
+								))}
+							</select>
+						</div>
+						<div className="flex items-center gap-2">
+							<span className="text-xs text-gray-600 font-medium">Filter by Class:</span>
+							<select
+								value={enrollmentClassFilter}
+								onChange={(e) => setEnrollmentClassFilter(e.target.value)}
+								className="px-3 py-1.5 text-xs font-medium text-gray-900 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
+							>
+								<option value="ALL">All Classes</option>
+								<option value="KG1">KG1</option>
+								<option value="KG2">KG2</option>
+								<option value="KG3">KG3</option>
+								<option value="P.1">P.1</option>
+								<option value="P.2">P.2</option>
+								<option value="P.3">P.3</option>
+								<option value="P.4">P.4</option>
+								<option value="P.5">P.5</option>
+								<option value="P.6">P.6</option>
+								<option value="P.7">P.7</option>
+							</select>
+						</div>
+						{(enrollmentSchoolFilter !== "ALL" || enrollmentClassFilter !== "ALL") && (
+							<button
+								onClick={() => {
+									setEnrollmentSchoolFilter("ALL");
+									setEnrollmentClassFilter("ALL");
+								}}
+								className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+							>
+								Clear Filters
+							</button>
+						)}
+					</div>
 				</div>
 
 				{showEnrollmentForm && userRole === "GM" && (
@@ -1706,43 +1811,94 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 				<div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-8">
 					<div className="flex items-center justify-between mb-4">
 						<div>
-							<h3 className="text-lg font-semibold text-gray-900">P.7 Preparation Performance</h3>
-							<p className="text-sm text-gray-600">Chart compares prep milestones; table shows last 3 years.</p>
+							<h3 className="text-lg font-semibold text-gray-900">P.7 Prep Exams (DIV 1)</h3>
+							<p className="text-sm text-gray-600">Division 1 percentage trends across prep exams; table shows last 3 years.</p>
 						</div>
-						<div className="flex items-center gap-2">
-							<span className="text-xs text-gray-600">Chart years</span>
-							<select
-								value={p7YearsWindow}
-								onChange={(e) => setP7YearsWindow(Number(e.target.value))}
-								className="px-2 py-1 text-xs font-bold text-gray-900 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
-							>
-								<option value={3}>Last 3</option>
-								<option value={4}>Last 4</option>
-								<option value={5}>Last 5</option>
-								<option value={999}>All Years</option>
-							</select>
+						<div className="flex items-center gap-3">
+							<div className="flex items-center gap-2">
+								<span className="text-xs text-gray-600">Years:</span>
+								<select
+									value={p7YearsWindow}
+									onChange={(e) => {
+										const value = Number(e.target.value);
+										setP7YearsWindow(value);
+										// Auto-switch to bar chart for filtered views, line for all years
+										setP7ChartType(value === 999 ? "line" : "bar");
+									}}
+									className="px-2 py-1 text-xs font-bold text-gray-900 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
+								>
+									<option value={999}>All Years</option>
+									<option value={3}>Last 3</option>
+									<option value={4}>Last 4</option>
+									<option value={5}>Last 5</option>
+								</select>
+							</div>
+							<div className="flex items-center gap-2 border-l border-gray-300 pl-3">
+								<span className="text-xs text-gray-600">View:</span>
+								<button
+									onClick={() => setP7ChartType("line")}
+									className={`px-2 py-1 text-xs font-medium rounded ${
+										p7ChartType === "line" 
+											? "bg-blue-600 text-white" 
+											: "bg-gray-100 text-gray-700 hover:bg-gray-200"
+									}`}
+								>
+									Line
+								</button>
+								<button
+									onClick={() => setP7ChartType("bar")}
+									className={`px-2 py-1 text-xs font-medium rounded ${
+										p7ChartType === "bar" 
+											? "bg-blue-600 text-white" 
+											: "bg-gray-100 text-gray-700 hover:bg-gray-200"
+									}`}
+								>
+									Bar
+								</button>
+							</div>
 						</div>
 					</div>
 					<div className="mb-4">
 						<ResponsiveContainer width="100%" height={360}>
-							<LineChart data={p7ChartData}>
-								<CartesianGrid strokeDasharray="3 3" />
-								<XAxis dataKey="year" />
-								<YAxis />
-								<Tooltip />
-								<Legend wrapperStyle={{ fontSize: "12px" }} />
-								<Line type="monotone" dataKey="Promotion" stroke="#ef4444" strokeWidth={2} dot={false} />
-								<Line type="monotone" dataKey="Prep 1" stroke="#f97316" strokeWidth={2} dot={false} />
-								<Line type="monotone" dataKey="Prep 2" stroke="#eab308" strokeWidth={2} dot={false} />
-								<Line type="monotone" dataKey="Prep 3" stroke="#84cc16" strokeWidth={2} dot={false} />
-								<Line type="monotone" dataKey="Prep 4" stroke="#22c55e" strokeWidth={2} dot={false} />
-								<Line type="monotone" dataKey="Prep 5" stroke="#10b981" strokeWidth={2} dot={false} />
-								<Line type="monotone" dataKey="Prep 6" stroke="#14b8a6" strokeWidth={2} dot={false} />
-								<Line type="monotone" dataKey="Prep 7" stroke="#06b6d4" strokeWidth={2} dot={false} />
-								<Line type="monotone" dataKey="Prep 8" stroke="#0ea5e9" strokeWidth={2} dot={false} />
-								<Line type="monotone" dataKey="Prep 9" stroke="#3b82f6" strokeWidth={2} dot={false} />
-								<Line type="monotone" dataKey="PLE" stroke="#6366f1" strokeWidth={2} dot={false} />
-							</LineChart>
+							{p7ChartType === "line" ? (
+								<LineChart data={p7ChartData}>
+									<CartesianGrid strokeDasharray="3 3" />
+									<XAxis dataKey="year" />
+									<YAxis />
+									<Tooltip />
+									<Legend wrapperStyle={{ fontSize: "12px" }} />
+									<Line type="monotone" dataKey="Promotion" stroke="#ef4444" strokeWidth={2} dot={false} />
+									<Line type="monotone" dataKey="Prep 1" stroke="#f97316" strokeWidth={2} dot={false} />
+									<Line type="monotone" dataKey="Prep 2" stroke="#eab308" strokeWidth={2} dot={false} />
+									<Line type="monotone" dataKey="Prep 3" stroke="#84cc16" strokeWidth={2} dot={false} />
+									<Line type="monotone" dataKey="Prep 4" stroke="#22c55e" strokeWidth={2} dot={false} />
+									<Line type="monotone" dataKey="Prep 5" stroke="#10b981" strokeWidth={2} dot={false} />
+									<Line type="monotone" dataKey="Prep 6" stroke="#14b8a6" strokeWidth={2} dot={false} />
+									<Line type="monotone" dataKey="Prep 7" stroke="#06b6d4" strokeWidth={2} dot={false} />
+									<Line type="monotone" dataKey="Prep 8" stroke="#0ea5e9" strokeWidth={2} dot={false} />
+									<Line type="monotone" dataKey="Prep 9" stroke="#3b82f6" strokeWidth={2} dot={false} />
+									<Line type="monotone" dataKey="PLE" stroke="#6366f1" strokeWidth={2} dot={false} />
+								</LineChart>
+							) : (
+								<BarChart data={p7ChartData}>
+									<CartesianGrid strokeDasharray="3 3" />
+									<XAxis dataKey="year" />
+									<YAxis />
+									<Tooltip />
+									<Legend wrapperStyle={{ fontSize: "12px" }} />
+									<Bar dataKey="Promotion" fill="#ef4444" />
+									<Bar dataKey="Prep 1" fill="#f97316" />
+									<Bar dataKey="Prep 2" fill="#eab308" />
+									<Bar dataKey="Prep 3" fill="#84cc16" />
+									<Bar dataKey="Prep 4" fill="#22c55e" />
+									<Bar dataKey="Prep 5" fill="#10b981" />
+									<Bar dataKey="Prep 6" fill="#14b8a6" />
+									<Bar dataKey="Prep 7" fill="#06b6d4" />
+									<Bar dataKey="Prep 8" fill="#0ea5e9" />
+									<Bar dataKey="Prep 9" fill="#3b82f6" />
+									<Bar dataKey="PLE" fill="#6366f1" />
+								</BarChart>
+							)}
 						</ResponsiveContainer>
 					</div>
 					<div className="overflow-x-auto">
@@ -1786,7 +1942,8 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 				</div>
 
 				<div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-8">
-					<div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+				<div className="flex flex-col gap-4 mb-4">
+					<div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
 						<h3 className="text-lg font-semibold text-gray-900">Other Income</h3>
 						{userRole === "GM" && (
 							<a
@@ -1797,52 +1954,133 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 							</a>
 						)}
 					</div>
-					{incomeChartData.length > 0 ? (
-						<div>
-							{incomes.some(inc => inc.percentage > 100) && (
-								<div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-									<p className="text-sm text-yellow-800">
-										<strong>Note:</strong> Some percentages exceed 100%. This may be old data from before the percentage conversion. 
-										Please <a href="/income-entry" className="underline font-medium">review and update your income data</a> with correct percentages (0-100%).
-									</p>
-								</div>
-							)}
-							<ResponsiveContainer width="100%" height={400}>
-								<BarChart data={incomeChartData}>
-									<CartesianGrid strokeDasharray="3 3" />
-									<XAxis dataKey="name" />
-									<YAxis label={{ value: 'Percentage (%)', angle: -90, position: 'insideLeft' }} />
-									<Tooltip formatter={(value) => `${Number(value).toFixed(1)}%`} />
-									<Legend />
-									{Array.from(new Set(incomes.map(inc => inc.year)))
-										.sort((a, b) => a - b)
-										.map((year, index) => (
-											<Bar key={year} dataKey={`year_${year}`} fill={COLORS[index % COLORS.length]} name={`Year ${year}`} />
-										))}
-								</BarChart>
-							</ResponsiveContainer>
-							<div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
-								{incomeChartData.map((item, idx) => (
+					<div className="flex flex-wrap items-center gap-4">
+						<div className="flex items-center gap-2">
+							<span className="text-xs text-gray-600 font-medium">Year:</span>
+							<select
+								value={incomeYearFilter}
+								onChange={(e) => setIncomeYearFilter(e.target.value === "ALL" ? "ALL" : Number(e.target.value))}
+								className="px-3 py-1.5 text-xs font-medium text-gray-900 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
+							>
+								<option value="ALL">All Years</option>
+								{Array.from(new Set(incomes.map(inc => inc.year))).sort((a, b) => b - a).map(year => (
+									<option key={year} value={year}>{year}</option>
+								))}
+							</select>
+						</div>
+						<div className="flex items-center gap-2">
+							<span className="text-xs text-gray-600 font-medium">Source:</span>
+							<select
+								value={incomeSourceFilter}
+								onChange={(e) => setIncomeSourceFilter(e.target.value)}
+								className="px-3 py-1.5 text-xs font-medium text-gray-900 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
+							>
+								<option value="ALL">All Sources</option>
+								{incomeSources.filter(s => s.isActive).map(source => (
+									<option key={source.id} value={source.name}>{source.name}</option>
+								))}
+							</select>
+						</div>
+						<div className="flex items-center gap-2 border-l border-gray-300 pl-4">
+							<span className="text-xs text-gray-600 font-medium">Display:</span>
+							<button
+								onClick={() => setIncomeDisplayMode("amount")}
+								className={`px-3 py-1.5 text-xs font-medium rounded-lg ${
+									incomeDisplayMode === "amount" 
+										? "bg-blue-600 text-white" 
+										: "bg-gray-100 text-gray-700 hover:bg-gray-200"
+								}`}
+							>
+								Amounts
+							</button>
+							<button
+								onClick={() => setIncomeDisplayMode("percentage")}
+								className={`px-3 py-1.5 text-xs font-medium rounded-lg ${
+									incomeDisplayMode === "percentage" 
+										? "bg-blue-600 text-white" 
+										: "bg-gray-100 text-gray-700 hover:bg-gray-200"
+								}`}
+							>
+								Percentages
+							</button>
+						</div>
+						{(incomeYearFilter !== "ALL" || incomeSourceFilter !== "ALL") && (
+							<button
+								onClick={() => {
+									setIncomeYearFilter("ALL");
+									setIncomeSourceFilter("ALL");
+								}}
+								className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+							>
+								Clear Filters
+							</button>
+						)}
+					</div>
+				</div>
+				{incomeChartData.length > 0 ? (
+					<div>
+						<ResponsiveContainer width="100%" height={400}>
+							<BarChart data={incomeChartData}>
+								<CartesianGrid strokeDasharray="3 3" />
+								<XAxis dataKey="name" />
+								<YAxis label={{ value: incomeDisplayMode === "amount" ? "Amount" : "Percentage (%)", angle: -90, position: "insideLeft" }} />
+								<Tooltip formatter={(value) => incomeDisplayMode === "amount" ? `${Number(value).toLocaleString()}` : `${Number(value).toFixed(1)}%`} />
+								<Legend />
+								{Array.from(new Set(incomes.map(inc => inc.year)))
+									.sort((a, b) => a - b)
+									.filter(year => incomeYearFilter === "ALL" || year === incomeYearFilter)
+									.map((year, index) => (
+										<Bar key={year} dataKey={`year_${year}`} fill={COLORS[index % COLORS.length]} name={`Year ${year}`} />
+									))}
+							</BarChart>
+						</ResponsiveContainer>
+						<div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+							{incomeChartData.map((item, idx) => {
+								const years = Object.keys(item).filter(k => k.startsWith("year_"));
+								const totalAmount = years.reduce((sum, k) => sum + Number(item[k]), 0);
+								
+								// Get percentage values
+								const sourceIncomes = incomes.filter(inc => 
+									inc.source === item.name && 
+									(incomeYearFilter === "ALL" || inc.year === incomeYearFilter)
+								);
+								const totalPercentage = sourceIncomes.reduce((sum, inc) => sum + inc.percentage, 0);
+								
+								return (
 									<div key={idx} className="p-3 bg-gray-50 rounded-lg">
 										<p className="text-xs font-medium text-gray-700">{item.name as string}</p>
-										<p className="text-sm font-semibold text-gray-900">
-											{Object.keys(item)
-												.filter(k => k.startsWith("year_"))
-												.reduce((sum, k) => sum + Number(item[k]), 0)
-												.toFixed(1)}%
-										</p>
+										{incomeDisplayMode === "amount" ? (
+											<>
+												<p className="text-sm font-semibold text-gray-900">
+													{totalAmount.toLocaleString()}
+												</p>
+												<p className="text-[10px] text-gray-500 mt-0.5">
+													{totalPercentage.toFixed(1)}%
+												</p>
+											</>
+										) : (
+											<>
+												<p className="text-sm font-semibold text-gray-900">
+													{totalPercentage.toFixed(1)}%
+												</p>
+												<p className="text-[10px] text-gray-500 mt-0.5">
+													{totalAmount.toLocaleString()}
+												</p>
+											</>
+										)}
 									</div>
-								))}
-							</div>
+								);
+							})}
 						</div>
-					) : (
-						<div className="h-[300px] flex items-center justify-center text-gray-500">
-							No income data available. <a href="/income-entry" className="text-blue-600 ml-2 hover:underline">Add income sources</a>
-						</div>
-					)}
-				</div>
+					</div>
+				) : (
+					<div className="h-[300px] flex items-center justify-center text-gray-500">
+						No income data available. <a href="/income-entry" className="text-blue-600 ml-2 hover:underline">Add income sources</a>
+					</div>
+				)}
+			</div>
 
-				<div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+			<div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
 					<div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
 						<h3 className="text-lg font-semibold text-gray-900 mb-4">Red Issues</h3>
 						{filteredIssues.length === 0 ? (

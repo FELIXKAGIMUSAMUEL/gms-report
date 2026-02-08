@@ -28,6 +28,8 @@ interface School {
 
 const PREP_NUMBERS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 const currentYear = new Date().getFullYear();
+const START_YEAR = 2023;
+const availableYears = Array.from({ length: currentYear - START_YEAR + 1 }, (_, i) => currentYear - i);
 
 export default function P7PrepEntryPage() {
   const { data: session, status } = useSession();
@@ -246,6 +248,66 @@ export default function P7PrepEntryPage() {
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteAllPrepResults = async (prepNumber: number) => {
+    const prepResults = Object.values(editingData).filter(result => result.prepNumber === prepNumber);
+    
+    if (prepResults.length === 0) {
+      alert("No results to delete for this prep");
+      return;
+    }
+
+    if (!confirm(`Delete ALL ${prepResults.length} school results for Prep ${prepNumber}? This cannot be undone.`)) {
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      let deletedCount = 0;
+      let failedCount = 0;
+
+      // Delete each result
+      for (const result of prepResults) {
+        try {
+          const response = await fetch(`/api/p7-prep-results?id=${result.id}`, {
+            method: "DELETE",
+          });
+
+          if (response.ok) {
+            deletedCount++;
+            // Remove from local state
+            const key = `${result.school}:${result.prepNumber}`;
+            setEditingData(prev => {
+              const newData = { ...prev };
+              delete newData[key];
+              return newData;
+            });
+          } else {
+            failedCount++;
+          }
+        } catch {
+          failedCount++;
+        }
+      }
+
+      // Refresh data
+      await fetchResults();
+      await fetchAllResults();
+
+      if (failedCount === 0) {
+        setSuccess(true);
+        setTimeout(() => setSuccess(false), 3000);
+      } else {
+        setError(`Deleted ${deletedCount} results, but ${failedCount} failed`);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete prep results");
     } finally {
       setLoading(false);
     }
@@ -515,7 +577,7 @@ export default function P7PrepEntryPage() {
                 onChange={(e) => setSelectedYear(Number(e.target.value))}
                 className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                {[currentYear, currentYear - 1, currentYear - 2].map(y => (
+                {availableYears.map(y => (
                   <option key={y} value={y}>{y}</option>
                 ))}
               </select>
@@ -715,8 +777,18 @@ export default function P7PrepEntryPage() {
                 return (
                   <div key={`prep-${prepNumber}`} className="border border-gray-200 rounded-lg overflow-hidden">
                     <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-gray-800">Prep {prepNumber} Results</h3>
-                      <span className="text-xs text-gray-500">{prepResults.length} schools</span>
+                      <div className="flex items-center gap-3">
+                        <h3 className="text-sm font-semibold text-gray-800">Prep {prepNumber} Results</h3>
+                        <span className="text-xs text-gray-500">{prepResults.length} schools</span>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteAllPrepResults(prepNumber)}
+                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors"
+                        title="Delete all results for this prep"
+                      >
+                        <TrashIcon className="w-4 h-4" />
+                        Delete All
+                      </button>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
@@ -725,6 +797,7 @@ export default function P7PrepEntryPage() {
                             <th className="px-4 py-3 text-left font-semibold text-gray-700">School</th>
                             <th className="px-3 py-3 text-center font-semibold text-gray-700 border-l border-gray-300">Enrollment</th>
                             <th className="px-3 py-3 text-center font-semibold text-gray-700 border-l border-gray-300">Div I</th>
+                            <th className="px-3 py-3 text-center font-semibold text-gray-700 border-l border-gray-300">DIV AVG %</th>
                             <th className="px-3 py-3 text-center font-semibold text-gray-700 border-l border-gray-300">Div II</th>
                             <th className="px-3 py-3 text-center font-semibold text-gray-700 border-l border-gray-300">Div III</th>
                             <th className="px-3 py-3 text-center font-semibold text-gray-700 border-l border-gray-300">Div IV</th>
@@ -733,35 +806,50 @@ export default function P7PrepEntryPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
-                          {prepResults.map(result => (
-                            <tr key={`${result.school}-${result.prepNumber}`} className="hover:bg-gray-50">
-                              <td className="px-4 py-3 font-semibold text-gray-900">{result.school}</td>
-                              <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.enrollment}</td>
-                              <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.divisionI}</td>
-                              <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.divisionII}</td>
-                              <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.divisionIII}</td>
-                              <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.divisionIV}</td>
-                              <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700 font-semibold">{result.averageScore.toFixed(1)}</td>
-                              <td className="px-4 py-3 text-center border-l border-gray-300">
-                                <div className="flex items-center justify-center gap-2">
-                                  <button
-                                    onClick={() => handleEditEntry(result.school, result.prepNumber)}
-                                    className="text-blue-600 hover:text-blue-800"
-                                    title="Edit"
-                                  >
-                                    <PencilSquareIcon className="w-5 h-5" />
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteEntry(result.school, result.prepNumber)}
-                                    className="text-red-600 hover:text-red-800"
-                                    title="Delete"
-                                  >
+                          {prepResults.map(result => {
+                            const totalDivisions = result.divisionI + result.divisionII + result.divisionIII + result.divisionIV;
+                            const divAvgPercent = totalDivisions > 0 ? ((result.divisionI / totalDivisions) * 100) : 0;
+                            
+                            return (
+                              <tr key={`${result.school}-${result.prepNumber}`} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 font-semibold text-gray-900">{result.school}</td>
+                                <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.enrollment}</td>
+                                <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.divisionI}</td>
+                                <td className="px-3 py-3 text-center border-l border-gray-300">
+                                  <span className={`font-semibold ${
+                                    divAvgPercent >= 70 ? 'text-green-600' :
+                                    divAvgPercent >= 50 ? 'text-blue-600' :
+                                    divAvgPercent >= 30 ? 'text-orange-600' :
+                                    'text-red-600'
+                                  }`}>
+                                    {divAvgPercent.toFixed(1)}%
+                                  </span>
+                                </td>
+                                <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.divisionII}</td>
+                                <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.divisionIII}</td>
+                                <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.divisionIV}</td>
+                                <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700 font-semibold">{result.averageScore.toFixed(1)}</td>
+                                <td className="px-4 py-3 text-center border-l border-gray-300">
+                                  <div className="flex items-center justify-center gap-2">
+                                    <button
+                                      onClick={() => handleEditEntry(result.school, result.prepNumber)}
+                                      className="text-blue-600 hover:text-blue-800"
+                                      title="Edit"
+                                    >
+                                      <PencilSquareIcon className="w-5 h-5" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteEntry(result.school, result.prepNumber)}
+                                      className="text-red-600 hover:text-red-800"
+                                      title="Delete"
+                                    >
                                     <TrashIcon className="w-5 h-5" />
                                   </button>
                                 </div>
                               </td>
                             </tr>
-                          ))}
+                          );
+                        })}
                         </tbody>
                       </table>
                     </div>

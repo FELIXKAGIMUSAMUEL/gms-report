@@ -5,7 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 export function SessionGuard({ children }: { children: React.ReactNode }) {
-  const { data: session, status } = useSession();
+  const { status } = useSession();
   const router = useRouter();
   const pathname = usePathname();
   const [isClient, setIsClient] = useState(false);
@@ -25,15 +25,9 @@ export function SessionGuard({ children }: { children: React.ReactNode }) {
     const isLoginPage = pathname === "/login";
 
     // If not authenticated and not on login page, redirect to login
+    // Middleware will handle this for protected routes
     if (status === "unauthenticated" && !isLoginPage) {
       router.push("/login");
-      return;
-    }
-
-    // If authenticated and on login page, redirect to dashboard
-    if (status === "authenticated" && isLoginPage) {
-      router.push("/dashboard");
-      return;
     }
   }, [status, pathname, router, isClient]);
 
@@ -42,8 +36,8 @@ export function SessionGuard({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
-  // Show loading state while checking session on client
-  if (status === "loading") {
+  // Show loading state only for non-login pages
+  if (status === "loading" && pathname !== "/login") {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="text-center">

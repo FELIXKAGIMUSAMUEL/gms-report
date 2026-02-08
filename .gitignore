@@ -29,6 +29,9 @@ yarn-error.log*
 .env*.local
 .env
 
+# Database backups - keep the latest one for setup
+# database_backup_*.sql
+
 # vercel
 .vercel
 

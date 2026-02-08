@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,6 +5,491 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String         @id @default(cuid())
+  email            String         @unique
+  password         String
+  name             String
+  role             UserRole       @default(GM)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  receivedMessages Message[]      @relation("ReceivedMessages")
+  sentMessages     Message[]      @relation("SentMessages")
+  notifications    Notification[]
+  reactions        Reaction[]
+  todos            Todo[]
+}
+
+model WeeklyReport {
+  id                        String     @id @default(cuid())
+  weekNumber                Int
+  year                      Int
+  weekStartDate             DateTime
+  weekEndDate               DateTime
+  publishedAt               DateTime?
+  isDraft                   Boolean    @default(true)
+  feesCollectionPercent     Float      @default(0)
+  schoolsExpenditurePercent Float      @default(0)
+  infrastructurePercent     Float      @default(0)
+  totalEnrollment           Int        @default(0)
+  theologyEnrollment        Int        @default(0)
+  p7PrepExamsPercent        Float      @default(0)
+  createdAt                 DateTime   @default(now())
+  updatedAt                 DateTime   @updatedAt
+  admissions                Int        @default(0)
+  syllabusCoveragePercent   Float      @default(0)
+  term                      Int        @default(1)
+  generalManager            String?
+  comments                  Comment[]
+  reactions                 Reaction[]
+
+  @@unique([weekNumber, year, term])
+  @@index([year, term, weekNumber])
+  @@index([publishedAt])
+}
+
+model Reaction {
+  id             String        @id @default(cuid())
+  type           ReactionType
+  comment        String?
+  sectionId      String
+  weeklyReportId String?
+  userId         String
+  createdAt      DateTime      @default(now())
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weeklyReport   WeeklyReport? @relation(fields: [weeklyReportId], references: [id], onDelete: Cascade)
+
+  @@index([weeklyReportId])
+  @@index([sectionId])
+}
+
+model KPIData {
+  id                        String   @id @default(cuid())
+  month                     Int
+  year                      Int
+  feesCollectionPercent     Float    @default(0)
+  schoolsExpenditurePercent Float    @default(0)
+  infrastructurePercent     Float    @default(0)
+  totalEnrollment           Int      @default(0)
+  theologyEnrollment        Int      @default(0)
+  p7PrepExamsPercent        Float    @default(0)
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  @@unique([month, year])
+  @@index([year, month])
+}
+
+model Enrollment {
+  id        String   @id @default(cuid())
+  school    String
+  class     String
+  term      Int
+  year      Int
+  count     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([school, class, term, year])
+  @@index([school])
+  @@index([year, term])
+  @@index([school, year, term])
+}
+
+model IncomeSource {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+}
+
+model OtherIncome {
+  id         String   @id @default(cuid())
+  year       Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  source     String
+  percentage Float    @default(0)
+  month      Int      @default(1)
+  amount     Float    @default(0)
+
+  @@index([year, month])
+  @@index([source])
+}
+
+model P7PrepPerformance {
+  id          String   @id @default(cuid())
+  year        Int      @unique
+  prep1       Float    @default(0)
+  prep2       Float    @default(0)
+  prep3       Float    @default(0)
+  prep4       Float    @default(0)
+  prep5       Float    @default(0)
+  prep6       Float    @default(0)
+  prep7       Float    @default(0)
+  prep8       Float    @default(0)
+  prep9       Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  p6Promotion Float    @default(0)
+  ple         Float    @default(0)
+
+  @@index([year])
+}
+
+model P7PrepResult {
+  id           String   @id @default(cuid())
+  school       String
+  prepNumber   Int
+  term         Int
+  year         Int
+  enrollment   Int      @default(0)
+  divisionI    Int      @default(0)
+  divisionII   Int      @default(0)
+  divisionIII  Int      @default(0)
+  divisionIV   Int      @default(0)
+  averageScore Float    @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([school, prepNumber, term, year])
+  @@index([school])
+  @@index([year, term])
+  @@index([prepNumber])
+  @@index([school, year, term])
+}
+
+model UpcomingEvent {
+  id        String     @id @default(cuid())
+  date      DateTime
+  activity  String
+  inCharge  String
+  rate      String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  status    ItemStatus @default(ACTIVE)
+
+  @@index([date])
+  @@index([status])
+}
+
+model GMProject {
+  id             String     @id @default(cuid())
+  projectName    String
+  progress       Float      @default(0)
+  projectManager String
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  status         ItemStatus @default(ACTIVE)
+
+  @@index([status])
+}
+
+model WeeklyScorecard {
+  id              String   @id @default(cuid())
+  week            Int
+  year            Int
+  school          String
+  academicPercent Float    @default(0)
+  financePercent  Float    @default(0)
+  qualityPercent  Float    @default(0)
+  tdpPercent      Float    @default(0)
+  theologyPercent Float    @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  term            Int      @default(1)
+
+  @@unique([week, year, term, school])
+  @@index([year, term, week])
+}
+
+model RedIssue {
+  id         String      @id @default(cuid())
+  issue      String
+  inCharge   String
+  status     IssueStatus @default(OPEN)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  itemStatus ItemStatus  @default(ACTIVE)
+
+  @@index([itemStatus])
+  @@index([status])
+}
+
+model School {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+}
+
+model Department {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+}
+
+model TheologyEnrollment {
+  id        String   @id @default(cuid())
+  school    String
+  year      Int
+  term      Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  class     String
+  count     Int      @default(0)
+
+  @@unique([school, class, term, year])
+  @@index([school])
+  @@index([year, term])
+  @@index([school, year, term])
+}
+
+model Message {
+  id          String    @id @default(cuid())
+  content     String
+  senderId    String
+  recipientId String
+  isRead      Boolean   @default(false)
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  recipient   User      @relation("ReceivedMessages", fields: [recipientId], references: [id], onDelete: Cascade)
+  sender      User      @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([senderId])
+  @@index([recipientId])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  type      NotificationType
+  title     String
+  message   String
+  data      String?
+  userId    String
+  isRead    Boolean          @default(false)
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model Todo {
+  id            String    @id @default(cuid())
+  userId        String
+  title         String
+  description   String?
+  dueDate       DateTime
+  isCompleted   Boolean   @default(false)
+  completedAt   DateTime?
+  isDeferred    Boolean   @default(false)
+  deferredUntil DateTime?
+  priority      String    @default("MEDIUM")
+  category      String    @default("GENERAL")
+  reminderSent  Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isCompleted])
+  @@index([dueDate])
+  @@index([isDeferred])
+}
+
+model TermSetting {
+  id         String   @id @default(cuid())
+  term       Int
+  year       Int
+  startDate  DateTime
+  endDate    DateTime
+  weeksCount Int      @default(13)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([term, year])
+  @@index([year, term])
+  @@index([startDate])
+}
+
+model OrganizationalGoal {
+  id           String   @id @default(cuid())
+  title        String
+  description  String?
+  category     String
+  targetValue  Float
+  currentValue Float    @default(0)
+  unit         String
+  year         Int
+  term         Int?
+  progress     Float    @default(0)
+  status       String   @default("in-progress")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([year, term])
+  @@index([category])
+  @@index([status])
+}
+
+model AlertConfig {
+  id         String   @id @default(cuid())
+  name       String
+  type       String
+  threshold  Float
+  operator   String
+  isActive   Boolean  @default(true)
+  recipients String   @default("all")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([type])
+  @@index([isActive])
+}
+
+model AlertHistory {
+  id            String    @id @default(cuid())
+  configId      String
+  school        String?
+  metric        String
+  expectedValue Float
+  actualValue   Float
+  severity      String    @default("medium")
+  message       String
+  isResolved    Boolean   @default(false)
+  resolvedAt    DateTime?
+  resolvedBy    String?
+  createdAt     DateTime  @default(now())
+
+  @@index([configId])
+  @@index([school])
+  @@index([severity])
+  @@index([isResolved])
+  @@index([createdAt])
+}
+
+model Comment {
+  id        String       @id @default(cuid())
+  reportId  String
+  field     String
+  text      String
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  report    WeeklyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
+  @@index([field])
+  @@index([createdAt])
+}
+
+model PLEResult {
+  id                 String   @id
+  school             String
+  year               Int
+  candidatesEnrolled Int      @default(0)
+  divisionI          Int      @default(0)
+  divisionII         Int      @default(0)
+  divisionIII        Int      @default(0)
+  divisionIV         Int      @default(0)
+  divisionC5         Int      @default(0)
+  divisionC6         Int      @default(0)
+  divisionP7         Int      @default(0)
+  divisionP8         Int      @default(0)
+  divisionU          Int      @default(0)
+  englishD1          Int      @default(0)
+  englishD2          Int      @default(0)
+  englishC3          Int      @default(0)
+  englishC4          Int      @default(0)
+  englishC5          Int      @default(0)
+  englishC6          Int      @default(0)
+  englishP7          Int      @default(0)
+  englishP8          Int      @default(0)
+  englishP9          Int      @default(0)
+  mathsD1            Int      @default(0)
+  mathsD2            Int      @default(0)
+  mathsC3            Int      @default(0)
+  mathsC4            Int      @default(0)
+  mathsC5            Int      @default(0)
+  mathsC6            Int      @default(0)
+  mathsP7            Int      @default(0)
+  mathsP8            Int      @default(0)
+  mathsP9            Int      @default(0)
+  scienceD1          Int      @default(0)
+  scienceD2          Int      @default(0)
+  scienceC3          Int      @default(0)
+  scienceC4          Int      @default(0)
+  scienceC5          Int      @default(0)
+  scienceC6          Int      @default(0)
+  scienceP7          Int      @default(0)
+  scienceP8          Int      @default(0)
+  scienceP9          Int      @default(0)
+  sstD1              Int      @default(0)
+  sstD2              Int      @default(0)
+  sstC3              Int      @default(0)
+  sstC4              Int      @default(0)
+  sstC5              Int      @default(0)
+  sstC6              Int      @default(0)
+  sstP7              Int      @default(0)
+  sstP8              Int      @default(0)
+  sstP9              Int      @default(0)
+  agg4               Int      @default(0)
+  agg5               Int      @default(0)
+  agg6               Int      @default(0)
+  agg7               Int      @default(0)
+  agg8               Int      @default(0)
+  agg9               Int      @default(0)
+  agg10              Int      @default(0)
+  agg11              Int      @default(0)
+  agg12              Int      @default(0)
+  agg13              Int      @default(0)
+  agg14              Int      @default(0)
+  agg15              Int      @default(0)
+  agg16              Int      @default(0)
+  agg17              Int      @default(0)
+  agg18              Int      @default(0)
+  agg19              Int      @default(0)
+  agg20              Int      @default(0)
+  agg21              Int      @default(0)
+  agg22              Int      @default(0)
+  agg23              Int      @default(0)
+  agg24              Int      @default(0)
+  agg25              Int      @default(0)
+  agg26              Int      @default(0)
+  agg27              Int      @default(0)
+  agg28              Int      @default(0)
+  agg29              Int      @default(0)
+  agg30              Int      @default(0)
+  agg31              Int      @default(0)
+  agg32              Int      @default(0)
+  agg33              Int      @default(0)
+  agg34              Int      @default(0)
+  agg35              Int      @default(0)
+  agg36              Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime
+
+  @@unique([school, year])
+  @@index([school])
+  @@index([school, year])
+  @@index([year])
 }
 
 enum UserRole {
@@ -38,426 +520,4 @@ enum NotificationType {
   REPORT_COMMENT
   REACTION
   SYSTEM
-}
-
-model User {
-  id        String     @id @default(cuid())
-  email     String     @unique
-  password  String
-  name      String
-  role      UserRole   @default(GM)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  reactions Reaction[]
-  sentMessages Message[] @relation("SentMessages")
-  receivedMessages Message[] @relation("ReceivedMessages")
-  notifications Notification[]
-  todos     Todo[]
-}
-
-// Weekly Report Snapshot - stores complete weekly data
-model WeeklyReport {
-  id                  String   @id @default(cuid())
-  weekNumber          Int      // ISO week number
-  year                Int
-  term                Int      @default(1)
-  weekStartDate       DateTime
-  weekEndDate         DateTime
-  publishedAt         DateTime?
-  isDraft             Boolean  @default(true)
-  generalManager      String?  // Name of the GM who submitted the report
-  
-  // KPI Data
-  feesCollectionPercent     Float @default(0)
-  schoolsExpenditurePercent Float @default(0)
-  infrastructurePercent     Float @default(0)
-  totalEnrollment           Int   @default(0)
-  theologyEnrollment        Int   @default(0)
-  p7PrepExamsPercent        Float @default(0)
-  syllabusCoveragePercent   Float @default(0)
-  admissions                Int   @default(0)
-  
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  reactions Reaction[]
-  comments  Comment[]
-
-    @@unique([weekNumber, year, term])
-    @@index([year, term, weekNumber])
-  @@index([publishedAt])
-}
-
-// Reactions and Comments from Trustees
-model Reaction {
-  id            String       @id @default(cuid())
-  type          ReactionType
-  comment       String?
-  sectionId     String       // Which card/section (e.g., "fees-collection", "enrollment", etc.)
-  
-  weeklyReportId String?
-  weeklyReport   WeeklyReport? @relation(fields: [weeklyReportId], references: [id], onDelete: Cascade)
-  
-  userId        String
-  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  createdAt     DateTime     @default(now())
-  
-  @@index([weeklyReportId])
-  @@index([sectionId])
-}
-
-// KPI Data - stores monthly/periodic KPI values
-model KPIData {
-  id                        String   @id @default(cuid())
-  month                     Int      // 1-12
-  year                      Int
-  feesCollectionPercent     Float    @default(0)
-  schoolsExpenditurePercent Float    @default(0)
-  infrastructurePercent     Float    @default(0)
-  totalEnrollment           Int      @default(0)
-  theologyEnrollment        Int      @default(0)
-  p7PrepExamsPercent        Float    @default(0)
-  createdAt                 DateTime @default(now())
-  updatedAt                 DateTime @updatedAt
-
-  @@unique([month, year])
-  @@index([year, month])
-}
-
-// Enrollment data for trend charts
-model Enrollment {
-  id        String   @id @default(cuid())
-  school    String   // School name
-  class     String   // KG1, KG2, KG3, P.1-P.7
-  term      Int      // 1, 2, 3
-  year      Int
-  count     Int      @default(0) // Number of students enrolled
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([school, class, term, year])
-  @@index([school])
-  @@index([year, term])
-  @@index([school, year, term])
-}
-
-// Income Source Master List
-model IncomeSource {
-  id        String   @id @default(cuid())
-  name      String   @unique  // e.g., "Swimming", "Uniforms", "Canteen"
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([name])
-}
-
-// Other Income sources - dynamic income tracking
-model OtherIncome {
-  id            String   @id @default(cuid())
-  source        String   // e.g., "Swimming", "Uniforms", "Canteen", "Saving Scheme"
-  percentage    Float    @default(0) // Percentage contribution (0-100)
-  year          Int
-  month         Int      @default(1)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  @@index([year, month])
-  @@index([source])
-}
-
-// P.7 Preparation Exam Performance
-model P7PrepPerformance {
-  id           String   @id @default(cuid())
-  year         Int
-  p6Promotion  Float    @default(0)  // P.6 to P.7 promotion rate
-  prep1        Float    @default(0)
-  prep2        Float    @default(0)
-  prep3        Float    @default(0)
-  prep4        Float    @default(0)
-  prep5        Float    @default(0)
-  prep6        Float    @default(0)
-  prep7        Float    @default(0)
-  prep8        Float    @default(0)
-  prep9        Float    @default(0)
-  ple          Float    @default(0)   // Primary Leaving Exam performance
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  @@unique([year])
-  @@index([year])
-}
-
-// P.7 Prep Exam Results - Detailed tracking per school per prep
-model P7PrepResult {
-  id              String   @id @default(cuid())
-  school          String   // School name
-  prepNumber      Int      // 1-9 (Prep 1 through Prep 9)
-  term            Int      // 1, 2, 3
-  year            Int
-  enrollment      Int      @default(0) // Total registered students
-  divisionI       Int      @default(0) // Division 1 count
-  divisionII      Int      @default(0) // Division 2 count
-  divisionIII     Int      @default(0) // Division 3 count
-  divisionIV      Int      @default(0) // Division 4 count
-  averageScore    Float    @default(0) // Average score 0-100
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@unique([school, prepNumber, term, year])
-  @@index([school])
-  @@index([year, term])
-  @@index([prepNumber])
-  @@index([school, year, term])
-}
-
-// Upcoming Events
-model UpcomingEvent {
-  id        String   @id @default(cuid())
-  date      DateTime
-  activity  String
-  inCharge  String
-  rate      String?  // Rating or priority
-  status    ItemStatus @default(ACTIVE)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([date])
-  @@index([status])
-}
-
-// GM Projects
-model GMProject {
-  id             String   @id @default(cuid())
-  projectName    String
-  progress       Float    @default(0) // 0-100
-  projectManager String
-  status         ItemStatus @default(ACTIVE)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  @@index([status])
-}
-
-// Weekly School Scorecard
-model WeeklyScorecard {
-  id               String   @id @default(cuid())
-  week             Int      // Week number
-  year             Int
-  term             Int      @default(1)
-  school           String
-  academicPercent  Float    @default(0)
-  financePercent   Float    @default(0)
-  qualityPercent   Float    @default(0)
-  tdpPercent       Float    @default(0)
-  theologyPercent  Float    @default(0)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  @@unique([week, year, term, school])
-  @@index([year, term, week])
-}
-
-// Red Issues Tracker
-model RedIssue {
-  id        String      @id @default(cuid())
-  issue     String
-  inCharge  String
-  status    IssueStatus @default(OPEN)
-  itemStatus ItemStatus @default(ACTIVE)
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
-
-  @@index([itemStatus])
-
-  @@index([status])
-}
-
-// School Master Data
-model School {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([name])
-}
-
-// Department Master Data
-model Department {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([name])
-}
-
-// Theology Enrollment by School, Class, Term, Year
-model TheologyEnrollment {
-  id        String   @id @default(cuid())
-  school    String   // School name
-  class     String   // KG1, KG2, KG3, P.1-P.7
-  term      Int      // 1, 2, 3
-  year      Int
-  count     Int      @default(0) // Number of students enrolled
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([school, class, term, year])
-  @@index([school])
-  @@index([year, term])
-  @@index([school, year, term])
-}
-
-// Messages between GM and Trustees
-model Message {
-  id        String   @id @default(cuid())
-  content   String   @db.Text
-  senderId  String
-  sender    User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
-  recipientId String
-  recipient User     @relation("ReceivedMessages", fields: [recipientId], references: [id], onDelete: Cascade)
-  isRead    Boolean  @default(false)
-  readAt    DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([senderId])
-  @@index([recipientId])
-  @@index([isRead])
-  @@index([createdAt])
-}
-
-// Notifications
-model Notification {
-  id        String   @id @default(cuid())
-  type      NotificationType
-  title     String
-  message   String   @db.Text
-  data      String?  @db.Text // JSON data for additional context
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  isRead    Boolean  @default(false)
-  readAt    DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId])
-  @@index([isRead])
-  @@index([type])
-  @@index([createdAt])
-}
-
-// User Todo/Program Reminders
-model Todo {
-  id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title       String   // e.g., "Board Meeting", "Staff Training"
-  description String?  @db.Text
-  dueDate     DateTime // Date and time of the program/event
-  isCompleted Boolean  @default(false)
-  completedAt DateTime?
-  isDeferred  Boolean  @default(false)
-  deferredUntil DateTime? // When to show it again if deferred
-  priority    String   @default("MEDIUM") // HIGH, MEDIUM, LOW
-  category    String   @default("GENERAL") // MEETING, TRAINING, EVENT, DEADLINE, OTHER
-  reminderSent Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@index([userId])
-  @@index([isCompleted])
-  @@index([dueDate])
-  @@index([isDeferred])
-}
-
-// Term Settings - Configure academic term dates
-model TermSetting {
-  id          String   @id @default(cuid())
-  term        Int      // 1, 2, or 3
-  year        Int
-  startDate   DateTime // When Week 1 starts for this term
-  endDate     DateTime // When this term ends
-  weeksCount  Int      @default(13) // Number of weeks in the term
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@unique([term, year])
-  @@index([year, term])
-  @@index([startDate])
-}
-
-// Organizational Goals and Targets
-model OrganizationalGoal {
-  id            String   @id @default(cuid())
-  title         String   // e.g., "Increase Enrollment to 5000", "Achieve 95% Fee Collection"
-  description   String?  @db.Text
-  category      String   // "enrollment", "financial", "academic", "infrastructure"
-  targetValue   Float    // Target number
-  currentValue  Float    @default(0)
-  unit          String   // "%", "students", "currency", etc.
-  year          Int
-  term          Int?     // Optional - can be annual or per-term
-  progress      Float    @default(0) // 0-100 percentage
-  status        String   @default("in-progress") // "not-started", "in-progress", "completed", "missed"
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  @@index([year, term])
-  @@index([category])
-  @@index([status])
-}
-
-// Alert Configuration and History
-model AlertConfig {
-  id              String   @id @default(cuid())
-  name            String
-  type            String   // "enrollment_drop", "fee_collection", "academic_performance", "financial_variance"
-  threshold       Float    // Value at which alert triggers
-  operator        String   // "below", "above", "equals", "change_percent"
-  isActive        Boolean  @default(true)
-  recipients      String   @default("all") // "all", "specific_gm", "specific_school"
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@index([type])
-  @@index([isActive])
-}
-
-model AlertHistory {
-  id              String   @id @default(cuid())
-  configId        String
-  school          String?
-  metric          String
-  expectedValue   Float
-  actualValue     Float
-  severity        String   @default("medium") // "low", "medium", "high", "critical"
-  message         String   @db.Text
-  isResolved      Boolean  @default(false)
-  resolvedAt      DateTime?
-  resolvedBy      String?
-  createdAt       DateTime @default(now())
-
-  @@index([configId])
-  @@index([school])
-  @@index([severity])
-  @@index([isResolved])
-  @@index([createdAt])
-}
-
-// Comment model for tracking detailed comments in weekly reports
-model Comment {
-  id        String   @id @default(cuid())
-  reportId  String
-  field     String   // Which field the comment is for (feesComment, expenditureComment, etc.)
-  text      String   @db.Text
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  report    WeeklyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
-
-  @@index([reportId])
-  @@index([field])
-  @@index([createdAt])
 }

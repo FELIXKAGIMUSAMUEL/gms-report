@@ -33,6 +33,7 @@ interface SchoolAnalysis {
 }
 
 const currentYear = new Date().getFullYear();
+const START_YEAR = 2023;
 const PREP_NUMBERS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'];
 
@@ -232,7 +233,7 @@ export default function P7PrepAnalysisPage() {
                   onChange={(e) => setSelectedYear(Number(e.target.value))}
                   className="px-4 py-2 border-2 border-gray-400 rounded-lg bg-white font-semibold text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
-                  {Array.from({ length: 7 }, (_, i) => currentYear - i).map((year) => (
+                  {Array.from({ length: currentYear - START_YEAR + 1 }, (_, i) => currentYear - i).map((year) => (
                     <option key={year} value={year}>{year}</option>
                   ))}
                 </select>
@@ -473,6 +474,7 @@ export default function P7PrepAnalysisPage() {
                           <th className="px-4 py-3 text-left font-semibold text-gray-700">School</th>
                           <th className="px-3 py-3 text-center font-semibold text-gray-700 border-l border-gray-300">Enrollment</th>
                           <th className="px-3 py-3 text-center font-semibold text-gray-700 border-l border-gray-300">Div I</th>
+                          <th className="px-3 py-3 text-center font-semibold text-gray-700 border-l border-gray-300">DIV AVG %</th>
                           <th className="px-3 py-3 text-center font-semibold text-gray-700 border-l border-gray-300">Div II</th>
                           <th className="px-3 py-3 text-center font-semibold text-gray-700 border-l border-gray-300">Div III</th>
                           <th className="px-3 py-3 text-center font-semibold text-gray-700 border-l border-gray-300">Div IV</th>
@@ -480,17 +482,32 @@ export default function P7PrepAnalysisPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
-                        {prepResults.map(result => (
-                          <tr key={`${result.school}-${result.prepNumber}`} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 font-semibold text-gray-900">{result.school}</td>
-                            <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.enrollment}</td>
-                            <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.divisionI}</td>
-                            <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.divisionII}</td>
-                            <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.divisionIII}</td>
-                            <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.divisionIV}</td>
-                            <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700 font-semibold">{result.averageScore.toFixed(1)}</td>
-                          </tr>
-                        ))}
+                        {prepResults.map(result => {
+                          const totalDivisions = result.divisionI + result.divisionII + result.divisionIII + result.divisionIV;
+                          const divAvgPercent = totalDivisions > 0 ? ((result.divisionI / totalDivisions) * 100) : 0;
+                          
+                          return (
+                            <tr key={`${result.school}-${result.prepNumber}`} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 font-semibold text-gray-900">{result.school}</td>
+                              <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.enrollment}</td>
+                              <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.divisionI}</td>
+                              <td className="px-3 py-3 text-center border-l border-gray-300">
+                                <span className={`font-semibold ${
+                                  divAvgPercent >= 70 ? 'text-green-600' :
+                                  divAvgPercent >= 50 ? 'text-blue-600' :
+                                  divAvgPercent >= 30 ? 'text-orange-600' :
+                                  'text-red-600'
+                                }`}>
+                                  {divAvgPercent.toFixed(1)}%
+                                </span>
+                              </td>
+                              <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.divisionII}</td>
+                              <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.divisionIII}</td>
+                              <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.divisionIV}</td>
+                              <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700 font-semibold">{result.averageScore.toFixed(1)}</td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

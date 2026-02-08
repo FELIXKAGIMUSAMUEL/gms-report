@@ -12,7 +12,8 @@ interface IncomeSource {
 interface IncomeEntry {
   id: string;
   source: string;
-  percentage: number;
+  amount: number;
+  percentage: number; // Legacy field
   year: number;
   month: number;
 }
@@ -34,8 +35,10 @@ const months = [
 
 export default function IncomeEntryPage() {
   const currentYear = useMemo(() => new Date().getFullYear(), []);
+  const START_YEAR = 2023;
   const [sources, setSources] = useState<IncomeSource[]>([]);
   const [incomes, setIncomes] = useState<IncomeEntry[]>([]);
+  const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [percentages, setPercentages] = useState<Record<string, string>>({});
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [selectedMonth, setSelectedMonth] = useState(
@@ -50,10 +53,10 @@ export default function IncomeEntryPage() {
   const [editingSourceName, setEditingSourceName] = useState("");
   const [deletingSourceId, setDeletingSourceId] = useState<string | null>(null);
   const [editingIncomeId, setEditingIncomeId] = useState<string | null>(null);
-  const [editingIncomePercentage, setEditingIncomePercentage] = useState("");
+  const [editingIncomeAmount, setEditingIncomeAmount] = useState("");
 
   const years = useMemo(
-    () => [currentYear, currentYear - 1, currentYear - 2, currentYear - 3],
+    () => Array.from({ length: currentYear - START_YEAR + 1 }, (_, i) => currentYear - i),
     [currentYear]
   );
 
@@ -101,10 +104,10 @@ export default function IncomeEntryPage() {
       (inc) => inc.year === selectedYear && inc.month === selectedMonth
     );
     const prefilled = relevant.reduce<Record<string, string>>((acc, inc) => {
-      acc[inc.source] = (inc.percentage ?? 0).toString();
+      acc[inc.source] = ((inc as any).amount || inc.percentage || 0).toString();
       return acc;
     }, {});
-    setPercentages(prefilled);
+    setAmounts(prefilled);
   }, [incomes, selectedMonth, selectedYear]);
 
   const groupedIncomes = useMemo(() => {
@@ -159,7 +162,7 @@ export default function IncomeEntryPage() {
       }
 
       setSources((prev) => prev.filter((s) => s.id !== id));
-      setPercentages((prev) => {
+      setAmounts((prev) => {
         const copy = { ...prev };
         const removed = sources.find((s) => s.id === id)?.name;
         if (removed) delete copy[removed];
@@ -195,7 +198,7 @@ export default function IncomeEntryPage() {
       );
 
       if (oldSource.name !== editingSourceName.trim()) {
-        setPercentages((prev) => {
+        setAmounts((prev) => {
           const copy = { ...prev };
           copy[editingSourceName.trim()] = copy[oldSource.name] || "";
           delete copy[oldSource.name];
@@ -212,17 +215,17 @@ export default function IncomeEntryPage() {
 
   const handleEditIncome = (income: IncomeEntry) => {
     setEditingIncomeId(income.id);
-    setEditingIncomePercentage((income.percentage ?? 0).toString());
+    setEditingIncomeAmount(((income as any).amount || income.percentage || 0).toString());
   };
 
-  const handleSaveIncomePercentage = async () => {
-    if (!editingIncomeId || !editingIncomePercentage.trim()) return;
+  const handleSaveIncomeAmount = async () => {
+    if (!editingIncomeId || !editingIncomeAmount.trim()) return;
 
     try {
       setError(null);
-      const percentage = parseFloat(editingIncomePercentage);
-      if (isNaN(percentage) || percentage < 0 || percentage > 100) {
-        throw new Error("Invalid percentage (must be 0-100)");
+      const amount = parseFloat(editingIncomeAmount);
+      if (isNaN(amount) || amount < 0) {
+        throw new Error("Invalid amount (must be positive number)");
       }
 
       const res = await fetch("/api/other-income", {
@@ -230,25 +233,25 @@ export default function IncomeEntryPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: editingIncomeId,
-          percentage,
+          amount,
         }),
       });
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || "Failed to update percentage");
+        throw new Error(body.error || "Failed to update amount");
       }
 
       setIncomes((prev) =>
         prev.map((inc) =>
-          inc.id === editingIncomeId ? { ...inc, percentage } : inc
+          inc.id === editingIncomeId ? { ...inc, amount, percentage: 0 } as any : inc
         )
       );
 
       setEditingIncomeId(null);
-      setEditingIncomePercentage("");
+      setEditingIncomeAmount("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update percentage");
+      setError(err instanceof Error ? err.message : "Failed to update amount");
     }
   };
 
@@ -274,17 +277,25 @@ export default function IncomeEntryPage() {
     }
   };
 
+  const handleAmountChange = (source: string, value: string) => {
+    setAmounts((prev) => ({ ...prev, [source]: value }));
+  };
+
   const handlePercentageChange = (source: string, value: string) => {
     setPercentages((prev) => ({ ...prev, [source]: value }));
   };
 
   const handleSaveIncomes = async () => {
     const entries = sources
-      .map((source) => ({ source: source.name, raw: percentages[source.name] }))
-      .filter((item) => item.raw !== undefined && item.raw !== "");
+      .map((source) => ({ 
+        source: source.name, 
+        rawAmount: amounts[source.name],
+        rawPercentage: percentages[source.name] 
+      }))
+      .filter((item) => (item.rawAmount !== undefined && item.rawAmount !== "") || (item.rawPercentage !== undefined && item.rawPercentage !== ""));
 
     if (!entries.length) {
-      setError("Please enter at least one percentage");
+      setError("Please enter at least one amount or percentage");
       return;
     }
 
@@ -293,21 +304,27 @@ export default function IncomeEntryPage() {
       setError(null);
 
       const payloads = entries.map((item) => {
-        const value = parseFloat(item.raw || "0");
-        if (Number.isNaN(value) || value < 0 || value > 100) {
+        const amount = item.rawAmount ? parseFloat(item.rawAmount) : 0;
+        const percentage = item.rawPercentage ? parseFloat(item.rawPercentage) : 0;
+        
+        if (item.rawAmount && (Number.isNaN(amount) || amount < 0)) {
+          throw new Error(`Invalid amount for ${item.source} (must be >= 0)`);
+        }
+        if (item.rawPercentage && (Number.isNaN(percentage) || percentage < 0 || percentage > 100)) {
           throw new Error(`Invalid percentage for ${item.source} (must be 0-100)`);
         }
+        
         const existing = incomes.find(
           (inc) =>
             inc.source === item.source &&
             inc.year === selectedYear &&
             inc.month === selectedMonth
         );
-        return { source: item.source, percentage: value, existing };
+        return { source: item.source, amount, percentage, existing };
       });
 
       await Promise.all(
-        payloads.map(({ source, percentage, existing }) => {
+        payloads.map(({ source, amount, percentage, existing }) => {
           if (existing) {
             return fetch("/api/other-income", {
               method: "PUT",
@@ -315,6 +332,7 @@ export default function IncomeEntryPage() {
               body: JSON.stringify({
                 id: existing.id,
                 source,
+                amount,
                 percentage,
                 year: selectedYear,
                 month: selectedMonth,
@@ -327,6 +345,7 @@ export default function IncomeEntryPage() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               source,
+              amount,
               percentage,
               year: selectedYear,
               month: selectedMonth,
@@ -341,6 +360,7 @@ export default function IncomeEntryPage() {
       }
       const refreshedJson = await refreshed.json();
       setIncomes(refreshedJson.data || refreshedJson || []);
+      setAmounts({});
       setPercentages({});
       setError(null);
       alert("Income entries saved successfully");
@@ -519,24 +539,43 @@ export default function IncomeEntryPage() {
             </p>
           ) : (
             <>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
                 {sources.map((source) => (
-                  <div key={source.id} className="flex flex-col">
-                    <label className="text-sm font-semibold text-gray-900 mb-2">
+                  <div key={source.id} className="flex flex-col p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <label className="text-sm font-semibold text-gray-900 mb-3">
                       {source.name}
                     </label>
-                    <input
-                      type="number"
-                      value={percentages[source.name] || ""}
-                      onChange={(e) =>
-                        handlePercentageChange(source.name, e.target.value)
-                      }
-                      placeholder="0.0"
-                      min="0"
-                      max="100"
-                      step="0.1"
-                      className="px-4 py-2 border-2 border-gray-400 rounded-lg text-sm font-medium text-gray-900 bg-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                    />
+                    <div className="space-y-2">
+                      <div>
+                        <label className="text-xs text-gray-600 mb-1 block">Amount (UGX) <span className="text-gray-400">- Optional</span></label>
+                        <input
+                          type="number"
+                          value={amounts[source.name] || ""}
+                          onChange={(e) =>
+                            handleAmountChange(source.name, e.target.value)
+                          }
+                          placeholder="0"
+                          min="0"
+                          step="1"
+                          className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg text-sm font-medium text-gray-900 bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-600 mb-1 block">Percentage (%) <span className="text-gray-400">- Optional</span></label>
+                        <input
+                          type="number"
+                          value={percentages[source.name] || ""}
+                          onChange={(e) =>
+                            handlePercentageChange(source.name, e.target.value)
+                          }
+                          placeholder="0.0"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg text-sm font-medium text-gray-900 bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        />
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>

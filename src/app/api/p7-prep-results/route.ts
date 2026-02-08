@@ -4,21 +4,25 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const year = searchParams.get('year') ? parseInt(searchParams.get('year')!) : new Date().getFullYear();
-    const term = searchParams.get('term') ? parseInt(searchParams.get('term')!) : 1;
+    const yearParam = searchParams.get('year');
+    const termParam = searchParams.get('term');
     const school = searchParams.get('school');
     const prepNumber = searchParams.get('prepNumber') ? parseInt(searchParams.get('prepNumber')!) : undefined;
 
-    const where: any = { year, term };
+    const where: any = {};
+    
+    // Only filter by year and term if explicitly provided
+    if (yearParam) where.year = parseInt(yearParam);
+    if (termParam) where.term = parseInt(termParam);
     if (school) where.school = school;
     if (prepNumber) where.prepNumber = prepNumber;
 
     const results = await prisma.p7PrepResult.findMany({
       where,
-      orderBy: [{ prepNumber: 'asc' }, { school: 'asc' }],
+      orderBy: [{ year: 'asc' }, { prepNumber: 'asc' }, { school: 'asc' }],
     });
 
-    console.log(`🔍 P7 Prep Results API: year=${year}, term=${term}, records=${results.length}`);
+    console.log(`🔍 P7 Prep Results API: year=${yearParam || 'all'}, term=${termParam || 'all'}, records=${results.length}`);
 
     return NextResponse.json(results, {
       headers: {

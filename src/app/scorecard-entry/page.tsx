@@ -45,6 +45,8 @@ interface ScorecardWithTrend extends WeeklyScorecard {
 }
 
 const currentYear = new Date().getFullYear();
+const START_YEAR = 2023;
+const availableYears = Array.from({ length: currentYear - START_YEAR + 1 }, (_, i) => currentYear - i);
 
 // Format numeric scores to two decimal places and hide invalid values
 const formatScore = (value?: number) =>
@@ -886,7 +888,7 @@ export default function ScorecardEntryPage() {
                   onChange={(e) => setSelectedYear(Number(e.target.value))}
                   className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
-                  {[currentYear, currentYear - 1, currentYear - 2].map(y => (
+                  {availableYears.map(y => (
                     <option key={y} value={y}>{y}</option>
                   ))}
                 </select>
