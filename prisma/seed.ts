@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 
 async function main() {
   // Create GM user
-  const gmPassword = await bcrypt.hash('gm123', 10);
+  const gmPassword = await bcrypt.hash('gm123', 12); // Increased to 12 rounds for better security
   await prisma.user.upsert({
     where: { email: 'gm@sak.org' },
     update: {},
@@ -18,7 +18,7 @@ async function main() {
   });
 
   // Create Trustee users
-  const trusteePassword = await bcrypt.hash('trustee123', 10);
+  const trusteePassword = await bcrypt.hash('trustee123', 12); // Increased to 12 rounds for better security
   await prisma.user.upsert({
     where: { email: 'trustee@sak.org' },
     update: {},
@@ -101,27 +101,37 @@ async function main() {
     });
   }
 
-  // Seed Enrollment data (2020-2026)
-  const enrollmentData = [
-    { year: 2020, count: 980 },
-    { year: 2021, count: 1050 },
-    { year: 2022, count: 1120 },
-    { year: 2023, count: 1180 },
-    { year: 2024, count: 1240 },
-    { year: 2025, count: 1290 },
-    { year: 2026, count: 1325 },
-  ];
+  // Seed Enrollment data by school/class/term/year
+  const enrollmentClasses = ["KG1", "KG2", "KG3", "P.1", "P.2", "P.3", "P.4", "P.5", "P.6", "P.7"];
+  const enrollmentYears = [2024, 2025, 2026];
+  const enrollmentTerm = 1;
 
-  for (const data of enrollmentData) {
-    await prisma.enrollment.upsert({
-      where: { year_month: { year: data.year, month: 1 } },
-      update: {},
-      create: {
-        year: data.year,
-        month: 1,
-        count: data.count,
-      },
-    });
+  for (const year of enrollmentYears) {
+    for (let schoolIndex = 0; schoolIndex < schoolNames.length; schoolIndex += 1) {
+      const school = schoolNames[schoolIndex];
+      for (let classIndex = 0; classIndex < enrollmentClasses.length; classIndex += 1) {
+        const className = enrollmentClasses[classIndex];
+        const count = 18 + classIndex * 3 + (year - 2024) * 2 + (schoolIndex % 5);
+        await prisma.enrollment.upsert({
+          where: {
+            school_class_term_year: {
+              school,
+              class: className,
+              term: enrollmentTerm,
+              year,
+            },
+          },
+          update: { count },
+          create: {
+            school,
+            class: className,
+            term: enrollmentTerm,
+            year,
+            count,
+          },
+        });
+      }
+    }
   }
 
   // Seed Other Income data (2023-2026)
@@ -163,11 +173,11 @@ async function main() {
     await prisma.otherIncome.create({ data });
   }
 
-  // Seed P.7 Prep Performance (2024-2026)
+  // Seed P.7 Prep Performance (2023-2025)
   const p7PrepData = [
+    { year: 2023, prep1: 62, prep2: 64, prep3: 66, prep4: 68, prep5: 70, prep6: 72, prep7: 74, prep8: 76, prep9: 78 },
     { year: 2024, prep1: 65, prep2: 68, prep3: 70, prep4: 72, prep5: 74, prep6: 76, prep7: 78, prep8: 80, prep9: 82 },
     { year: 2025, prep1: 68, prep2: 70, prep3: 72, prep4: 75, prep5: 77, prep6: 79, prep7: 81, prep8: 83, prep9: 85 },
-    { year: 2026, prep1: 70, prep2: 72, prep3: 75, prep4: 78, prep5: 80, prep6: 82, prep7: 84, prep8: 86, prep9: 88 },
   ];
 
   for (const data of p7PrepData) {
@@ -176,6 +186,59 @@ async function main() {
       update: {},
       create: data,
     });
+  }
+
+  // Seed P.7 Prep Results (2023-2026)
+  const p7ResultYears = [2023, 2024, 2025, 2026];
+  const p7PrepNumbers = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+  for (let yearIndex = 0; yearIndex < p7ResultYears.length; yearIndex += 1) {
+    const year = p7ResultYears[yearIndex];
+    for (let schoolIndex = 0; schoolIndex < schoolNames.length; schoolIndex += 1) {
+      const school = schoolNames[schoolIndex];
+      for (let prepIndex = 0; prepIndex < p7PrepNumbers.length; prepIndex += 1) {
+        const prepNumber = p7PrepNumbers[prepIndex];
+        const term = prepNumber <= 3 ? 1 : prepNumber <= 6 ? 2 : 3;
+        const enrollment = 60 + (year - 2023) * 3 + (schoolIndex % 5) * 2 + prepIndex;
+        const divisionI = Math.round(enrollment * 0.18);
+        const divisionII = Math.round(enrollment * 0.32);
+        const divisionIII = Math.round(enrollment * 0.3);
+        const used = divisionI + divisionII + divisionIII;
+        const divisionIV = Math.max(0, enrollment - used);
+        const averageScore = 62 + (year - 2023) * 2 + (prepIndex % 3) * 3 + (schoolIndex % 4);
+
+        await prisma.p7PrepResult.upsert({
+          where: {
+            school_prepNumber_term_year: {
+              school,
+              prepNumber,
+              term,
+              year,
+            },
+          },
+          update: {
+            enrollment,
+            divisionI,
+            divisionII,
+            divisionIII,
+            divisionIV,
+            averageScore,
+          },
+          create: {
+            school,
+            prepNumber,
+            term,
+            year,
+            enrollment,
+            divisionI,
+            divisionII,
+            divisionIII,
+            divisionIV,
+            averageScore,
+          },
+        });
+      }
+    }
   }
 
   // Seed Upcoming Events

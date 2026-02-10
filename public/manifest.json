@@ -3,10 +3,12 @@
   "short_name": "GMS",
   "description": "School Management System Reporting Dashboard",
   "start_url": "/dashboard",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#3b82f6",
   "orientation": "portrait-primary",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/icon-192x192.png",
@@ -25,7 +27,13 @@
     {
       "name": "Dashboard",
       "url": "/dashboard",
-      "description": "View KPI Dashboard"
+      "description": "View KPI Dashboard",
+      "icons": [
+        {
+          "src": "/icon-192x192.png",
+          "sizes": "192x192"
+        }
+      ]
     },
     {
       "name": "Submit Report",
@@ -39,5 +47,20 @@
     }
   ],
   "categories": ["education", "business", "productivity"],
-  "screenshots": []
+  "screenshots": [],
+  "share_target": {
+    "action": "/share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
+  "features": [
+    "offline-mode",
+    "background-sync",
+    "push-notifications"
+  ]
 }

@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { school, prepNumber, term, year, enrollment, divisionI, divisionII, divisionIII, divisionIV, averageScore } = body;
+    const { school, prepNumber, term, year, enrollment, agg4, divisionI, divisionII, divisionIII, divisionIV, divisionU, averageScore } = body;
 
     if (!school || prepNumber === undefined || !term || !year) {
       return NextResponse.json(
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate divisions sum doesn't exceed enrollment
-    const totalDivisions = (divisionI || 0) + (divisionII || 0) + (divisionIII || 0) + (divisionIV || 0);
+    const totalDivisions = (divisionI || 0) + (divisionII || 0) + (divisionIII || 0) + (divisionIV || 0) + (divisionU || 0);
     if (totalDivisions > enrollment) {
       return NextResponse.json(
         { error: `Divisions sum (${totalDivisions}) cannot exceed enrollment (${enrollment})` },
@@ -69,10 +69,12 @@ export async function POST(request: NextRequest) {
       where: { school_prepNumber_term_year: { school, prepNumber, term, year } },
       update: {
         enrollment,
+        agg4: agg4 || 0,
         divisionI,
         divisionII,
         divisionIII,
         divisionIV,
+        divisionU: divisionU || 0,
         averageScore,
       },
       create: {
@@ -81,10 +83,12 @@ export async function POST(request: NextRequest) {
         term,
         year,
         enrollment,
+        agg4: agg4 || 0,
         divisionI,
         divisionII,
         divisionIII,
         divisionIV,
+        divisionU: divisionU || 0,
         averageScore,
       },
     });

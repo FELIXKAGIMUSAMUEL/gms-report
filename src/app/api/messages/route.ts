@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { sendPushToUser } from '@/lib/push-notifications';
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -53,11 +54,18 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { content, recipientId } = await request.json();
+    const { content, recipientId, attachmentUrl, attachmentName, attachmentType } = await request.json();
 
-    if (!content || !recipientId) {
+    if ((!content || !content.trim()) && !attachmentUrl) {
       return NextResponse.json(
-        { error: 'Content and recipient ID are required' },
+        { error: 'Content or attachment is required' },
+        { status: 400 }
+      );
+    }
+
+    if (!recipientId) {
+      return NextResponse.json(
+        { error: 'Recipient ID is required' },
         { status: 400 }
       );
     }
@@ -72,9 +80,12 @@ export async function POST(request: NextRequest) {
 
     const message = await prisma.message.create({
       data: {
-        content,
+        content: content || '',
         senderId: sender.id,
         recipientId,
+        attachmentUrl: attachmentUrl || null,
+        attachmentName: attachmentName || null,
+        attachmentType: attachmentType || null,
         isRead: false,
       },
       include: {
@@ -87,12 +98,17 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Create notification message
+    const notificationMessage = attachmentUrl 
+      ? `📎 ${attachmentName || 'File attachment'}${content ? ': ' + content.substring(0, 80) : ''}`
+      : content.substring(0, 100);
+
     // Create a notification for the recipient
     await prisma.notification.create({
       data: {
         type: 'MESSAGE',
         title: `New message from ${sender.name}`,
-        message: content.substring(0, 100),
+        message: notificationMessage,
         data: JSON.stringify({
           messageId: message.id,
           senderId: sender.id,
@@ -101,6 +117,14 @@ export async function POST(request: NextRequest) {
         isRead: false,
       },
     });
+
+    // Send push notification
+    sendPushToUser(recipientId, {
+      title: `New message from ${sender.name}`,
+      message: notificationMessage,
+      url: "/dashboard",
+      tag: `message-${message.id}`,
+    }).catch(err => console.error("Failed to send push:", err));
 
     return NextResponse.json(message, { status: 201 });
   } catch (error) {
@@ -166,11 +190,36 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    // Check if user is sender or recipient of the message
+    const message = await prisma.message.findUnique({
+      where: { id: messageId },
+    });
+
+    if (!message) {
+      return NextResponse.json({ error: 'Message not found' }, { status: 404 });
+    }
+
+    if (message.senderId !== user.id && message.recipientId !== user.id) {
+      return NextResponse.json(
+        { error: 'You can only delete your own messages' },
+        { status: 403 }
+      );
+    }
+
+    // Delete the message
     await prisma.message.delete({
       where: { id: messageId },
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, message: 'Message deleted' });
   } catch (error) {
     console.error('Error deleting message:', error);
     return NextResponse.json({ error: 'Failed to delete message' }, { status: 500 });

@@ -16,22 +16,17 @@ interface IncomeEntry {
   percentage: number; // Legacy field
   year: number;
   month: number;
+  term: number;
+  week: number | null;
 }
 
-const months = [
-  { num: 1, name: "January" },
-  { num: 2, name: "February" },
-  { num: 3, name: "March" },
-  { num: 4, name: "April" },
-  { num: 5, name: "May" },
-  { num: 6, name: "June" },
-  { num: 7, name: "July" },
-  { num: 8, name: "August" },
-  { num: 9, name: "September" },
-  { num: 10, name: "October" },
-  { num: 11, name: "November" },
-  { num: 12, name: "December" },
+const terms = [
+  { num: 1, name: "Term 1" },
+  { num: 2, name: "Term 2" },
+  { num: 3, name: "Term 3" },
 ];
+
+const weeks = Array.from({ length: 14 }, (_, i) => ({ num: i + 1, name: `Week ${i + 1}` }));
 
 export default function IncomeEntryPage() {
   const currentYear = useMemo(() => new Date().getFullYear(), []);
@@ -41,9 +36,8 @@ export default function IncomeEntryPage() {
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [percentages, setPercentages] = useState<Record<string, string>>({});
   const [selectedYear, setSelectedYear] = useState(currentYear);
-  const [selectedMonth, setSelectedMonth] = useState(
-    new Date().getMonth() + 1
-  );
+  const [selectedTerm, setSelectedTerm] = useState(1);
+  const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
   const [newSourceName, setNewSourceName] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -101,14 +95,19 @@ export default function IncomeEntryPage() {
 
   useEffect(() => {
     const relevant = incomes.filter(
-      (inc) => inc.year === selectedYear && inc.month === selectedMonth
+      (inc) => {
+        const matchYear = inc.year === selectedYear;
+        const matchTerm = (inc as any).term === selectedTerm;
+        const matchWeek = selectedWeek === null || (inc as any).week === selectedWeek;
+        return matchYear && matchTerm && matchWeek;
+      }
     );
     const prefilled = relevant.reduce<Record<string, string>>((acc, inc) => {
       acc[inc.source] = ((inc as any).amount || inc.percentage || 0).toString();
       return acc;
     }, {});
     setAmounts(prefilled);
-  }, [incomes, selectedMonth, selectedYear]);
+  }, [incomes, selectedTerm, selectedWeek, selectedYear]);
 
   const groupedIncomes = useMemo(() => {
     return incomes.reduce<Record<string, IncomeEntry[]>>((acc, inc) => {
@@ -285,6 +284,41 @@ export default function IncomeEntryPage() {
     setPercentages((prev) => ({ ...prev, [source]: value }));
   };
 
+  const handleClearPeriod = async (term: number, week: number | null, yearKey: string) => {
+    const confirmMsg = week 
+      ? `Delete all income entries for Term ${term}, Week ${week} in ${yearKey}?`
+      : `Delete all income entries for Term ${term} in ${yearKey}?`;
+    
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      setError(null);
+      const toDelete = incomes.filter(inc => {
+        const matchYear = inc.year === parseInt(yearKey);
+        const matchTerm = (inc as any).term === term;
+        const matchWeek = week === null 
+          ? (inc as any).week === null 
+          : (inc as any).week === week;
+        return matchYear && matchTerm && matchWeek;
+      });
+
+      await Promise.all(
+        toDelete.map(inc =>
+          fetch("/api/other-income", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: inc.id }),
+          })
+        )
+      );
+
+      setIncomes(prev => prev.filter(inc => !toDelete.find(d => d.id === inc.id)));
+      alert(`Cleared ${toDelete.length} entries successfully`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to clear entries");
+    }
+  };
+
   const handleSaveIncomes = async () => {
     const entries = sources
       .map((source) => ({ 
@@ -302,6 +336,9 @@ export default function IncomeEntryPage() {
     try {
       setSaving(true);
       setError(null);
+      
+      let updatedCount = 0;
+      let createdCount = 0;
 
       const payloads = entries.map((item) => {
         const amount = item.rawAmount ? parseFloat(item.rawAmount) : 0;
@@ -315,17 +352,23 @@ export default function IncomeEntryPage() {
         }
         
         const existing = incomes.find(
-          (inc) =>
-            inc.source === item.source &&
-            inc.year === selectedYear &&
-            inc.month === selectedMonth
+          (inc) => {
+            const matchSource = inc.source === item.source;
+            const matchYear = inc.year === selectedYear;
+            const matchTerm = (inc as any).term === selectedTerm;
+            const matchWeek = selectedWeek === null 
+              ? (inc as any).week === null 
+              : (inc as any).week === selectedWeek;
+            return matchSource && matchYear && matchTerm && matchWeek;
+          }
         );
         return { source: item.source, amount, percentage, existing };
       });
 
       await Promise.all(
-        payloads.map(({ source, amount, percentage, existing }) => {
+        payloads.map(async ({ source, amount, percentage, existing }) => {
           if (existing) {
+            updatedCount++;
             return fetch("/api/other-income", {
               method: "PUT",
               headers: { "Content-Type": "application/json" },
@@ -335,11 +378,13 @@ export default function IncomeEntryPage() {
                 amount,
                 percentage,
                 year: selectedYear,
-                month: selectedMonth,
+                term: selectedTerm,
+                week: selectedWeek,
               }),
             });
           }
 
+          createdCount++;
           return fetch("/api/other-income", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -348,7 +393,9 @@ export default function IncomeEntryPage() {
               amount,
               percentage,
               year: selectedYear,
-              month: selectedMonth,
+              month: new Date().getMonth() + 1, // Keep month for backward compatibility
+              term: selectedTerm,
+              week: selectedWeek,
             }),
           });
         })
@@ -363,7 +410,11 @@ export default function IncomeEntryPage() {
       setAmounts({});
       setPercentages({});
       setError(null);
-      alert("Income entries saved successfully");
+      
+      const message = [];
+      if (createdCount > 0) message.push(`${createdCount} new`);
+      if (updatedCount > 0) message.push(`${updatedCount} updated`);
+      alert(`Income entries saved: ${message.join(', ')}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save incomes");
     } finally {
@@ -517,16 +568,33 @@ export default function IncomeEntryPage() {
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-900 mb-2">
-                Month
+                Term
               </label>
               <select
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                value={selectedTerm}
+                onChange={(e) => setSelectedTerm(Number(e.target.value))}
                 className="px-4 py-2 border-2 border-gray-400 rounded-lg text-sm font-medium text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors cursor-pointer"
               >
-                {months.map((m) => (
-                  <option key={m.num} value={m.num}>
-                    {m.name}
+                {terms.map((t) => (
+                  <option key={t.num} value={t.num}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-900 mb-2">
+                Week <span className="text-gray-500 text-xs">(Optional)</span>
+              </label>
+              <select
+                value={selectedWeek ?? ''}
+                onChange={(e) => setSelectedWeek(e.target.value ? Number(e.target.value) : null)}
+                className="px-4 py-2 border-2 border-gray-400 rounded-lg text-sm font-medium text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors cursor-pointer"
+              >
+                <option value="">All Weeks</option>
+                {weeks.map((w) => (
+                  <option key={w.num} value={w.num}>
+                    {w.name}
                   </option>
                 ))}
               </select>
@@ -540,10 +608,24 @@ export default function IncomeEntryPage() {
           ) : (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
-                {sources.map((source) => (
+                {sources.map((source) => {
+                  const existingEntry = incomes.find(
+                    (inc) =>
+                      inc.source === source.name &&
+                      inc.year === selectedYear &&
+                      (inc as any).term === selectedTerm &&
+                      ((selectedWeek === null && (inc as any).week === null) ||
+                       (inc as any).week === selectedWeek)
+                  );
+                  return (
                   <div key={source.id} className="flex flex-col p-4 bg-gray-50 rounded-lg border border-gray-200">
-                    <label className="text-sm font-semibold text-gray-900 mb-3">
-                      {source.name}
+                    <label className="text-sm font-semibold text-gray-900 mb-3 flex items-center justify-between">
+                      <span>{source.name}</span>
+                      {existingEntry && (
+                        <span className="text-xs px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full">
+                          Has Data
+                        </span>
+                      )}
                     </label>
                     <div className="space-y-2">
                       <div>
@@ -577,7 +659,8 @@ export default function IncomeEntryPage() {
                       </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
 
               <button
@@ -585,8 +668,21 @@ export default function IncomeEntryPage() {
                 disabled={saving}
                 className="w-full bg-green-600 text-white px-4 py-3 rounded-lg font-medium hover:bg-green-700 transition-colors disabled:bg-gray-400"
               >
-                Save Income for {months.find((m) => m.num === selectedMonth)?.name}{" "}
-                {selectedYear}
+                {(() => {
+                  const hasAnyDataForPeriod = sources.some((source) =>
+                    incomes.find(
+                      (inc) =>
+                        inc.source === source.name &&
+                        inc.year === selectedYear &&
+                        (inc as any).term === selectedTerm &&
+                        ((selectedWeek === null && (inc as any).week === null) ||
+                         (inc as any).week === selectedWeek)
+                    )
+                  );
+                  return hasAnyDataForPeriod
+                    ? `Update Income for Term ${selectedTerm}${selectedWeek ? `, Week ${selectedWeek}` : ''} ${selectedYear}`
+                    : `Save Income for Term ${selectedTerm}${selectedWeek ? `, Week ${selectedWeek}` : ''} ${selectedYear}`;
+                })()}
               </button>
             </>
           )}
@@ -595,10 +691,13 @@ export default function IncomeEntryPage() {
         {Object.entries(groupedIncomes)
           .sort(([a], [b]) => Number(b) - Number(a))
           .map(([yearKey, yearIncomes]) => {
-            const monthlyData = yearIncomes.reduce<Record<number, IncomeEntry[]>>(
+            const termData = yearIncomes.reduce<Record<string, IncomeEntry[]>>(
               (acc, inc) => {
-                if (!acc[inc.month]) acc[inc.month] = [];
-                acc[inc.month].push(inc);
+                const term = (inc as any).term || 1;
+                const week = (inc as any).week;
+                const key = week ? `${term}-${week}` : `${term}`;
+                if (!acc[key]) acc[key] = [];
+                acc[key].push(inc);
                 return acc;
               },
               {}
@@ -622,31 +721,52 @@ export default function IncomeEntryPage() {
                     </p>
                   </div>
                 )}
-                {Object.entries(monthlyData)
-                  .sort(([a], [b]) => Number(b) - Number(a))
-                  .map(([monthNum, monthIncomes]) => {
-                    const monthName = months.find(
-                      (m) => m.num === Number(monthNum)
-                    )?.name;
-                    const total = monthIncomes.reduce(
-                      (sum, inc) => sum + (inc.percentage ?? 0),
+                {Object.entries(termData)
+                  .sort(([a], [b]) => {
+                    const [termA, weekA] = a.split('-').map(Number);
+                    const [termB, weekB] = b.split('-').map(Number);
+                    if (termA !== termB) return termB - termA;
+                    return (weekB || 0) - (weekA || 0);
+                  })
+                  .map(([termKey, termIncomes]) => {
+                    const [term, week] = termKey.split('-').map(Number);
+                    const displayName = week ? `Term ${term}, Week ${week}` : `Term ${term}`;
+                    const totalAmount = termIncomes.reduce(
+                      (sum, inc) => sum + ((inc as any).amount || 0),
                       0
                     );
-                    const average = monthIncomes.length > 0 ? total / monthIncomes.length : 0;
+                    const totalPercentage = termIncomes.reduce(
+                      (sum, inc) => sum + (inc.percentage || 0),
+                      0
+                    );
+                    const avgPercentage = termIncomes.length > 0 ? totalPercentage / termIncomes.length : 0;
 
                     return (
                       <div
-                        key={monthNum}
+                        key={termKey}
                         className="mb-4 border-b border-gray-200 pb-4 last:border-0"
                       >
                         <div className="flex justify-between items-center mb-2">
-                          <h4 className="font-medium text-gray-900">{monthName}</h4>
-                          <span className="text-sm font-semibold text-blue-600">
-                            Average: {average.toFixed(1)}%
-                          </span>
+                          <h4 className="font-medium text-gray-900">{displayName}</h4>
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm font-semibold text-blue-600">
+                              Total: {totalAmount.toLocaleString()} UGX
+                            </span>
+                            <span className="text-sm font-semibold text-green-600">
+                              Avg %: {avgPercentage.toFixed(1)}%
+                            </span>
+                            <button
+                              onClick={() => handleClearPeriod(term, week || null, yearKey)}
+                              className="px-3 py-1 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors flex items-center gap-1"
+                              title="Delete all entries for this period"
+                            >
+                              <TrashIcon className="w-3 h-3" />
+                              Clear All
+                            </button>
+                          </div>
                         </div>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                          {monthIncomes.map((inc) => (
+                          {termIncomes.map((inc) => (
                             <div key={inc.id} className="p-2 bg-gray-50 rounded border border-gray-200 hover:border-gray-300 transition-colors">
                               <div className="flex items-start justify-between gap-1 mb-1">
                                 <p className="text-xs text-gray-600">{inc.source}</p>
@@ -671,20 +791,19 @@ export default function IncomeEntryPage() {
                                 <div className="flex gap-1">
                                   <input
                                     type="number"
-                                    value={editingIncomePercentage}
-                                    onChange={(e) => setEditingIncomePercentage(e.target.value)}
+                                    value={editingIncomeAmount}
+                                    onChange={(e) => setEditingIncomeAmount(e.target.value)}
                                     min="0"
-                                    max="100"
-                                    step="0.1"
+                                    step="1"
                                     className="flex-1 px-1 py-0.5 border border-blue-400 rounded text-xs font-semibold text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
                                     autoFocus
                                     onKeyDown={(e) => {
-                                      if (e.key === "Enter") handleSaveIncomePercentage();
+                                      if (e.key === "Enter") handleSaveIncomeAmount();
                                       if (e.key === "Escape") setEditingIncomeId(null);
                                     }}
                                   />
                                   <button
-                                    onClick={handleSaveIncomePercentage}
+                                    onClick={handleSaveIncomeAmount}
                                     className="px-1 py-0.5 bg-green-600 text-white rounded text-xs font-medium hover:bg-green-700 transition-colors"
                                   >
                                     ✓
@@ -692,7 +811,7 @@ export default function IncomeEntryPage() {
                                 </div>
                               ) : (
                                 <p className="text-sm font-semibold text-gray-900">
-                                  {(inc.percentage ?? 0).toFixed(1)}%
+                                  {((inc as any).amount || inc.percentage || 0).toLocaleString()} UGX
                                 </p>
                               )}
                             </div>

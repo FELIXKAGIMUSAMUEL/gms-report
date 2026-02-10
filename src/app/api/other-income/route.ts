@@ -1,14 +1,27 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 // Note: auth temporarily relaxed to unblock usage; tighten when session is fixed.
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     console.log("[other-income GET] Starting fetch...");
+    
+    // Get query parameters for filtering
+    const searchParams = request.nextUrl.searchParams;
+    const year = searchParams.get('year');
+    const term = searchParams.get('term');
+    const week = searchParams.get('week');
+    
+    const where: any = {};
+    if (year) where.year = parseInt(year);
+    if (term) where.term = parseInt(term);
+    if (week) where.week = parseInt(week);
+    
     const incomeData = await prisma.otherIncome.findMany({
-      orderBy: [{ year: "desc" }, { month: "desc" }],
+      where,
+      orderBy: [{ year: "desc" }, { term: "desc" }, { week: "desc" }, { month: "desc" }],
     });
     console.log("[other-income GET] Success, found", incomeData.length, "entries");
     return NextResponse.json({ data: incomeData });
@@ -27,16 +40,16 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     console.log("[other-income POST] Starting...");
-    const { source, percentage, year, month } = await request.json();
+    const { source, percentage, year, month, term, week, amount } = await request.json();
 
-    if (!source || typeof percentage !== "number" || !year) {
+    if (!source || !year) {
       return NextResponse.json(
-        { error: "Missing or invalid required fields" },
+        { error: "Missing required fields (source, year)" },
         { status: 400 }
       );
     }
 
-    if (percentage < 0 || percentage > 100) {
+    if (percentage !== undefined && (percentage < 0 || percentage > 100)) {
       return NextResponse.json(
         { error: "Percentage must be between 0 and 100" },
         { status: 400 }
@@ -46,9 +59,12 @@ export async function POST(request: Request) {
     const incomeEntry = await prisma.otherIncome.create({
       data: {
         source: source.trim(),
-        percentage: percentage,
+        percentage: percentage || 0,
+        amount: amount || 0,
         year,
         month: month || new Date().getMonth() + 1,
+        term: term || 1,
+        week: week || null,
       },
     });
     console.log("[other-income POST] Created entry:", incomeEntry.id);
@@ -67,7 +83,7 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     console.log("[other-income PUT] Starting...");
-    const { id, source, percentage, year, month } = await request.json();
+    const { id, source, percentage, year, month, term, week, amount } = await request.json();
 
     if (!id) {
       return NextResponse.json(
@@ -87,8 +103,11 @@ export async function PUT(request: Request) {
       }
       data.percentage = percentage;
     }
+    if (amount !== undefined) data.amount = amount;
     if (year !== undefined) data.year = year;
     if (month !== undefined) data.month = month;
+    if (term !== undefined) data.term = term;
+    if (week !== undefined) data.week = week;
 
     const updated = await prisma.otherIncome.update({
       where: { id },

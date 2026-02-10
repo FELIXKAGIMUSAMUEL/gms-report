@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { sendPushToUser } from "@/lib/push-notifications";
 
 export async function GET() {
   try {
@@ -116,6 +117,16 @@ export async function POST(request: Request) {
         await prisma.notification.createMany({
           data: notificationData,
         });
+
+        // Send push notifications to trustees
+        for (const trustee of trustees) {
+          sendPushToUser(trustee.id, {
+            title: "GM posted a comment",
+            message: comment.substring(0, 100),
+            url: "/dashboard",
+            tag: `reaction-${reaction.id}`,
+          }).catch(err => console.error("Failed to send push:", err));
+        }
       }
     }
 
@@ -156,6 +167,14 @@ export async function POST(request: Request) {
               isRead: false,
             },
           });
+
+          // Send push notification to GM
+          sendPushToUser(gm.id, {
+            title: notificationTitle,
+            message: notificationMessage,
+            url: "/dashboard",
+            tag: `reaction-${reaction.id}`,
+          }).catch(err => console.error("Failed to send push:", err));
         }
       }
     }

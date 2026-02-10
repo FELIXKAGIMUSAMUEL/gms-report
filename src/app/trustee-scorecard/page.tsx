@@ -4,7 +4,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
-import { TrendingUpIcon, TrendingDownIcon, ChevronUpIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
+import { ArrowTrendingUpIcon, ArrowTrendingDownIcon, ChevronUpIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
 
 interface SchoolMetrics {
   name: string;
@@ -56,7 +56,27 @@ export default function TrusteeScorecard() {
   };
 
   const rankedSchools = useMemo(() => {
-    let sorted = [...schools];
+    // Calculate overall score from available metrics with defaults
+    let sorted = schools.map(school => {
+      const enrollment = school.totalEnrollment || 0;
+      const fees = school.feesCollection || 0;
+      const prep = school.p7PrepAverage || 0;
+      const infra = school.infrastructureScore || 0;
+      const staff = school.staffEngagement || 0;
+      
+      // Calculate overall as average of available percentage scores
+      const overall = school.overallScore || ((fees + prep + infra + staff) / 4);
+      
+      return {
+        ...school,
+        totalEnrollment: enrollment,
+        feesCollection: fees,
+        p7PrepAverage: prep,
+        infrastructureScore: infra,
+        staffEngagement: staff,
+        overallScore: overall,
+      };
+    });
     
     if (sortBy === "overall") {
       sorted.sort((a, b) => b.overallScore - a.overallScore);
@@ -87,14 +107,15 @@ export default function TrusteeScorecard() {
   };
 
   const renderStatusBadge = (value: number) => {
-    const color = getStatusColor(value);
+    const safeValue = value || 0;
+    const color = getStatusColor(safeValue);
     return (
       <div className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold ${
         color === "green" ? "bg-green-100 text-green-800" :
         color === "amber" ? "bg-amber-100 text-amber-800" :
         "bg-red-100 text-red-800"
       }`}>
-        {value.toFixed(1)}%
+        {safeValue.toFixed(1)}%
       </div>
     );
   };
@@ -108,20 +129,31 @@ export default function TrusteeScorecard() {
           <p className="text-gray-600 mt-1">Overall rankings and school-by-school performance metrics</p>
         </div>
 
-        {/* Controls */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
-            <select
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
-              {[2024, 2025, 2026].map((year) => (
-                <option key={year} value={year}>{year}</option>
-              ))}
-            </select>
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
           </div>
+        ) : rankedSchools.length === 0 ? (
+          <div className="bg-white rounded-lg shadow p-12 text-center">
+            <p className="text-gray-500 text-lg">No school data available for {selectedYear}</p>
+            <p className="text-gray-400 text-sm mt-2">Try selecting a different year</p>
+          </div>
+        ) : (
+          <>
+            {/* Controls */}
+            <div className="flex flex-col sm:flex-row gap-4 mb-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
+                <select
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  {[2024, 2025, 2026].map((year) => (
+                    <option key={year} value={year}>{year}</option>
+                  ))}
+                </select>
+              </div>
 
           <div className="flex-1">
             <label className="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
@@ -178,7 +210,7 @@ export default function TrusteeScorecard() {
               <div key={school.name} className="bg-gradient-to-br from-yellow-50 to-amber-50 border-2 border-amber-400 rounded-lg p-6">
                 <div className="text-3xl mb-2">{medal}</div>
                 <h3 className="text-xl font-bold text-gray-900">{school.name}</h3>
-                <p className="text-3xl font-bold text-amber-600 mt-2">{school.overallScore.toFixed(1)}</p>
+                <p className="text-3xl font-bold text-amber-600 mt-2">{(school.overallScore || 0).toFixed(1)}</p>
                 <p className="text-xs text-gray-600 mt-1">Overall Score</p>
               </div>
             );
@@ -217,30 +249,30 @@ export default function TrusteeScorecard() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         <div className="font-semibold text-gray-900">{school.name}</div>
-                        {school.trend === "up" && <TrendingUpIcon className="w-4 h-4 text-green-600" />}
-                        {school.trend === "down" && <TrendingDownIcon className="w-4 h-4 text-red-600" />}
+                        {school.trend === "up" && <ArrowTrendingUpIcon className="w-4 h-4 text-green-600" />}
+                        {school.trend === "down" && <ArrowTrendingDownIcon className="w-4 h-4 text-red-600" />}
                       </div>
                     </td>
                     <td className="px-6 py-4 text-center text-sm text-gray-700">{school.totalEnrollment}</td>
                     <td className="px-6 py-4 text-center">
-                      <StatusBadge value={school.feesCollection} />
+                      {renderStatusBadge(school.feesCollection)}
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <StatusBadge value={school.p7PrepAverage} />
+                      {renderStatusBadge(school.p7PrepAverage)}
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <StatusBadge value={school.infrastructureScore} />
+                      {renderStatusBadge(school.infrastructureScore)}
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <StatusBadge value={school.staffEngagement} />
+                      {renderStatusBadge(school.staffEngagement)}
                     </td>
                     <td className="px-6 py-4 text-center">
                       <div className={`inline-flex items-center gap-1 px-3 py-2 rounded font-bold text-sm ${
-                        getStatusColor(school.overallScore) === "green" ? "bg-green-100 text-green-800" :
-                        getStatusColor(school.overallScore) === "amber" ? "bg-amber-100 text-amber-800" :
+                        getStatusColor(school.overallScore || 0) === "green" ? "bg-green-100 text-green-800" :
+                        getStatusColor(school.overallScore || 0) === "amber" ? "bg-amber-100 text-amber-800" :
                         "bg-red-100 text-red-800"
                       }`}>
-                        {school.overallScore.toFixed(1)}
+                        {(school.overallScore || 0).toFixed(1)}
                       </div>
                     </td>
                   </tr>
@@ -266,6 +298,8 @@ export default function TrusteeScorecard() {
             <span className="text-gray-600">Needs Attention (&lt;70)</span>
           </div>
         </div>
+          </>
+        )}
       </div>
     </DashboardLayout>
   );

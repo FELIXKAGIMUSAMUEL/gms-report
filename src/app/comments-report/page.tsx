@@ -8,17 +8,28 @@ import { PrinterIcon } from "@heroicons/react/24/outline";
 
 interface Comment {
   id: string;
-  reportId: string;
+  category: "kpi" | "red-issues" | "projects" | "events";
+  reportId?: string;
   field: string;
   text: string;
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
   report?: {
     year: number;
     term: number;
     weekNumber: number;
     generalManager: string;
   };
+  user?: {
+    name: string;
+    email: string;
+  } | null;
+  itemDetails?: {
+    title: string;
+    status?: string;
+    inCharge?: string;
+    date?: string;
+  } | null;
 }
 
 const currentYear = new Date().getFullYear();
@@ -33,6 +44,7 @@ export default function CommentsReportPage() {
     return date.toISOString().split('T')[0];
   });
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedField, setSelectedField] = useState("all");
   const [selectedGM, setSelectedGM] = useState("all");
   
@@ -52,6 +64,14 @@ export default function CommentsReportPage() {
     admissionsComment: "Admissions",
   };
 
+  const categoryLabels: Record<string, string> = {
+    all: "All Categories",
+    kpi: "KPI Comments",
+    "red-issues": "Red Issues Feedback",
+    projects: "Project Feedback",
+    events: "Event Feedback",
+  };
+
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/login");
@@ -66,7 +86,7 @@ export default function CommentsReportPage() {
 
   useEffect(() => {
     filterComments();
-  }, [comments, startDate, endDate, selectedField, selectedGM]);
+  }, [comments, startDate, endDate, selectedCategory, selectedField, selectedGM]);
 
   const fetchComments = async () => {
     try {
@@ -96,9 +116,14 @@ export default function CommentsReportPage() {
       filtered = filtered.filter(c => new Date(c.createdAt) <= end);
     }
 
-    // Filter by field
+    // Filter by category
+    if (selectedCategory !== "all") {
+      filtered = filtered.filter(c => c.category === selectedCategory);
+    }
+
+    // Filter by field (only for KPI comments)
     if (selectedField !== "all") {
-      filtered = filtered.filter(c => c.field === selectedField);
+      filtered = filtered.filter(c => c.category === "kpi" && c.field === selectedField);
     }
 
     // Filter by GM
@@ -139,44 +164,57 @@ export default function CommentsReportPage() {
         {/* Filters */}
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-6 print:hidden">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Filter Options</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+              <label className="block text-sm font-semibold text-gray-900 mb-2">Start Date</label>
               <input
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border-2 border-gray-400 rounded-lg text-sm font-medium text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+              <label className="block text-sm font-semibold text-gray-900 mb-2">End Date</label>
               <input
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border-2 border-gray-400 rounded-lg text-sm font-medium text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+              <label className="block text-sm font-semibold text-gray-900 mb-2">Report Type</label>
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="w-full px-3 py-2 border-2 border-gray-400 rounded-lg text-sm font-medium text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
+              >
+                {Object.entries(categoryLabels).map(([key, label]) => (
+                  <option key={key} value={key}>{label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-900 mb-2">KPI Field</label>
               <select
                 value={selectedField}
                 onChange={(e) => setSelectedField(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                disabled={selectedCategory !== "all" && selectedCategory !== "kpi"}
+                className="w-full px-3 py-2 border-2 border-gray-400 rounded-lg text-sm font-medium text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed cursor-pointer"
               >
-                <option value="all">All Categories</option>
+                <option value="all">All KPI Fields</option>
                 {Object.entries(fieldLabels).map(([key, label]) => (
                   <option key={key} value={key}>{label}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">General Manager</label>
+              <label className="block text-sm font-semibold text-gray-900 mb-2">General Manager</label>
               <select
                 value={selectedGM}
                 onChange={(e) => setSelectedGM(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border-2 border-gray-400 rounded-lg text-sm font-medium text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
               >
                 <option value="all">All GMs</option>
                 {uniqueGMs.map((gm) => (
@@ -220,11 +258,12 @@ export default function CommentsReportPage() {
             <div className="hidden print:block border-b-2 border-gray-800 pb-4 mb-6">
               <div className="text-center">
                 <h1 className="text-2xl font-bold text-gray-900">SIR APOLLO KAGGWA SCHOOLS</h1>
-                <p className="text-sm text-gray-600 mt-1">COMMENTS REPORT</p>
+                <p className="text-sm text-gray-600 mt-1">COMMENTS & FEEDBACK REPORT</p>
                 <div className="mt-3 text-xs text-gray-600">
                   <p>Report Generated: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
                   <p>Period: {new Date(startDate).toLocaleDateString('en-GB')} to {new Date(endDate).toLocaleDateString('en-GB')}</p>
-                  {selectedField !== "all" && <p>Category: {fieldLabels[selectedField]}</p>}
+                  {selectedCategory !== "all" && <p>Report Type: {categoryLabels[selectedCategory]}</p>}
+                  {selectedField !== "all" && <p>KPI Field: {fieldLabels[selectedField]}</p>}
                   {selectedGM !== "all" && <p>General Manager: {selectedGM}</p>}
                 </div>
               </div>
@@ -245,34 +284,79 @@ export default function CommentsReportPage() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {filteredComments.map((comment, index) => (
-                    <div key={comment.id} className="border-l-4 border-blue-500 pl-4 py-2 page-break-inside-avoid">
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 text-xs text-gray-600 mb-1">
-                            <span className="font-semibold text-gray-900">#{index + 1}</span>
-                            <span>{new Date(comment.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-                            <span>•</span>
-                            <span className="font-medium">{fieldLabels[comment.field] || comment.field}</span>
-                            {comment.report && (
-                              <>
-                                <span>•</span>
-                                <span>Week {comment.report.weekNumber}, Term {comment.report.term}, {comment.report.year}</span>
-                              </>
-                            )}
-                          </div>
-                          {comment.report?.generalManager && (
-                            <div className="text-xs text-gray-500 mb-2">
-                              By: <span className="font-medium text-gray-700">{comment.report.generalManager}</span>
+                  {filteredComments.map((comment, index) => {
+                    const categoryColor = 
+                      comment.category === "kpi" ? "border-blue-500" :
+                      comment.category === "red-issues" ? "border-red-500" :
+                      comment.category === "projects" ? "border-purple-500" :
+                      "border-amber-500";
+
+                    const categoryBadge = 
+                      comment.category === "kpi" ? "bg-blue-100 text-blue-800" :
+                      comment.category === "red-issues" ? "bg-red-100 text-red-800" :
+                      comment.category === "projects" ? "bg-purple-100 text-purple-800" :
+                      "bg-amber-100 text-amber-800";
+
+                    return (
+                      <div key={comment.id} className={`border-l-4 ${categoryColor} pl-4 py-2 page-break-inside-avoid`}>
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 text-xs text-gray-600 mb-1 flex-wrap">
+                              <span className="font-semibold text-gray-900">#{index + 1}</span>
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase ${categoryBadge}`}>
+                                {categoryLabels[comment.category]}
+                              </span>
+                              <span>{new Date(comment.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                              {comment.category === "kpi" && (
+                                <>
+                                  <span>•</span>
+                                  <span className="font-medium">{fieldLabels[comment.field] || comment.field}</span>
+                                </>
+                              )}
+                              {comment.report && (
+                                <>
+                                  <span>•</span>
+                                  <span>Week {comment.report.weekNumber}, Term {comment.report.term}, {comment.report.year}</span>
+                                </>
+                              )}
                             </div>
-                          )}
+                            
+                            {/* Item Details for Red Issues, Projects, Events */}
+                            {comment.itemDetails && (
+                              <div className="text-xs text-gray-700 mb-2 bg-gray-50 p-2 rounded">
+                                <div className="font-semibold text-gray-900">{comment.itemDetails.title}</div>
+                                <div className="flex gap-3 mt-1 text-[11px]">
+                                  {comment.itemDetails.status && (
+                                    <span>Status: <span className="font-medium">{comment.itemDetails.status.replace(/_/g, " ")}</span></span>
+                                  )}
+                                  {comment.itemDetails.inCharge && (
+                                    <span>In-Charge: <span className="font-medium">{comment.itemDetails.inCharge}</span></span>
+                                  )}
+                                  {comment.itemDetails.date && (
+                                    <span>Date: <span className="font-medium">{new Date(comment.itemDetails.date).toLocaleDateString('en-GB')}</span></span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Author Info */}
+                            <div className="text-xs text-gray-500 mb-2">
+                              {comment.user ? (
+                                <span>By: <span className="font-medium text-gray-700">{comment.user.name}</span></span>
+                              ) : comment.report?.generalManager ? (
+                                <span>By: <span className="font-medium text-gray-700">{comment.report.generalManager}</span></span>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Comment Text */}
+                        <div className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed bg-white p-3 rounded border border-gray-100">
+                          {comment.text}
                         </div>
                       </div>
-                      <div className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
-                        {comment.text}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

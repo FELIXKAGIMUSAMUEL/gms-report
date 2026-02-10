@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { PrismaClient } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
+import { sendPushToUser } from "@/lib/push-notifications";
 
 const prisma = new PrismaClient();
 
@@ -143,6 +144,18 @@ export async function POST(request: NextRequest) {
         await prisma.notification.createMany({
           data: notificationData,
         });
+
+        // Send push notifications to all trustees
+        for (const trustee of trustees) {
+          sendPushToUser(trustee.id, {
+            title: `GM posted Week ${weekNumber} ${year} Report`,
+            message: isUpdate 
+              ? `Weekly report for Week ${weekNumber}, ${year} has been ${isDraft ? 'saved as draft' : 'published'}`
+              : `New weekly report created for Week ${weekNumber}, ${year}`,
+            url: "/dashboard",
+            tag: `report-${report.id}`,
+          }).catch(err => console.error("Failed to send push:", err));
+        }
       }
     }
 

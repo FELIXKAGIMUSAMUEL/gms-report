@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { ArrowLeftIcon, CheckCircleIcon } from "@heroicons/react/24/outline";
 
@@ -20,7 +20,22 @@ interface WeeklyReport {
   admissions: number;
 }
 
+interface EnrollmentRecord {
+  id: string;
+  school: string;
+  class: string;
+  term: number;
+  year: number;
+  count: number;
+}
+
+interface School {
+  id: string;
+  name: string;
+}
+
 const currentYear = new Date().getFullYear();
+const CLASSES = ["KG1", "KG2", "KG3", "P.1", "P.2", "P.3", "P.4", "P.5", "P.6", "P.7"];
 
 function SavedReportsList({ selectedYear, selectedTerm, onLoad }: { selectedYear: number; selectedTerm: number; onLoad: (r: WeeklyReport) => void }) {
   const [items, setItems] = useState<WeeklyReport[]>([]);
@@ -229,6 +244,22 @@ export default function KPIEntryPage() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [schools, setSchools] = useState<School[]>([]);
+  const [enrollmentRecords, setEnrollmentRecords] = useState<EnrollmentRecord[]>([]);
+  const [theologyRecords, setTheologyRecords] = useState<EnrollmentRecord[]>([]);
+  const [prefillLoading, setPrefillLoading] = useState(false);
+  const [prepPrefill, setPrepPrefill] = useState<{ percent: number; label: string }>({ percent: 0, label: "No prep data" });
+  const [p7PrepResults, setP7PrepResults] = useState<P7PrepResult[]>([]);
+
+  const [adjustModal, setAdjustModal] = useState<{ type: "enrollment" | "theology" | null; school: string; className: string; delta: number; saving: boolean; error: string | null }>({
+    type: null,
+    school: "",
+    className: "",
+    delta: 0,
+    saving: false,
+    error: null,
+  });
+
   const scrollToFormTop = () => {
     requestAnimationFrame(() => {
       formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -239,11 +270,97 @@ export default function KPIEntryPage() {
     });
   };
 
+  const fetchSchools = useCallback(async () => {
+    try {
+      const res = await fetch("/api/schools");
+      if (res.ok) {
+        const data = await res.json();
+        setSchools(data.data || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch schools", err);
+    }
+  }, []);
+
+  const aggregateCounts = (records: EnrollmentRecord[]) => records.reduce((sum, r) => sum + (r.count || 0), 0);
+
+  const loadPrefills = useCallback(async () => {
+    setPrefillLoading(true);
+    try {
+      const params = new URLSearchParams({ year: String(selectedYear), term: String(selectedTerm) });
+      const [enrollRes, theoRes] = await Promise.all([
+        fetch(`/api/enrollment?${params.toString()}`),
+        fetch(`/api/theology-enrollment?${params.toString()}`),
+      ]);
+
+      if (enrollRes.ok) {
+        const enrollmentData = await enrollRes.json();
+        const list = Array.isArray(enrollmentData) ? enrollmentData : [];
+        setEnrollmentRecords(list);
+        const total = aggregateCounts(list);
+        setFormData(prev => ({ ...prev, totalEnrollment: total }));
+      }
+
+      if (theoRes.ok) {
+        const theologyData = await theoRes.json();
+        const list = Array.isArray(theologyData) ? theologyData : [];
+        setTheologyRecords(list);
+        const total = aggregateCounts(list);
+        setFormData(prev => ({ ...prev, theologyEnrollment: total }));
+      }
+    } catch (err) {
+      console.error("Failed to prefill enrollment/theology", err);
+    } finally {
+      setPrefillLoading(false);
+    }
+  }, [selectedYear, selectedTerm]);
+
+  const loadPrepPrefill = useCallback(async () => {
+    try {
+      const params = new URLSearchParams({ year: String(selectedYear), term: String(selectedTerm) });
+      const res = await fetch(`/api/p7-prep-results?${params.toString()}`);
+      const data = res.ok ? await res.json() : [];
+      const list: P7PrepResult[] = Array.isArray(data) ? data : [];
+      setP7PrepResults(list);
+
+      const byTerm = list.filter(r => r.year === selectedYear && r.term === selectedTerm);
+      if (!byTerm.length) {
+        setPrepPrefill({ percent: 0, label: "No prep data" });
+        setFormData(prev => ({ ...prev, p7PrepExamsPercent: 0 }));
+        return;
+      }
+      const maxPrep = Math.max(...byTerm.map(r => r.prepNumber));
+      const latest = byTerm.filter(r => r.prepNumber === maxPrep);
+      const div1 = latest.reduce((sum, r) => sum + (r.divisionI || 0), 0);
+      const enroll = latest.reduce((sum, r) => sum + (r.enrollment || 0), 0);
+      const percent = enroll ? (div1 / enroll) * 100 : 0;
+      setPrepPrefill({ percent, label: `Prep ${maxPrep}` });
+      setFormData(prev => ({ ...prev, p7PrepExamsPercent: percent }));
+    } catch (err) {
+      console.error("Failed to prefill prep data", err);
+    }
+  }, [selectedYear, selectedTerm]);
+
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/login");
     }
   }, [status, router]);
+
+  useEffect(() => {
+    if (status === "authenticated") {
+      fetchSchools();
+      loadPrefills();
+      loadPrepPrefill();
+    }
+  }, [status, fetchSchools, loadPrefills, loadPrepPrefill]);
+
+  useEffect(() => {
+    if (status === "authenticated") {
+      loadPrefills();
+      loadPrepPrefill();
+    }
+  }, [status, selectedYear, selectedTerm, loadPrefills, loadPrepPrefill]);
 
   const termWeekToAbsolute = (term: number, week: number): number => {
     return (term - 1) * 13 + week;
@@ -344,6 +461,43 @@ export default function KPIEntryPage() {
   useEffect(() => {
     setLastCheckedKey("");
   }, [selectedYear, selectedTerm, selectedWeek]);
+
+  const openAdjust = (type: "enrollment" | "theology") => {
+    setAdjustModal({ type, school: "", className: "", delta: 0, saving: false, error: null });
+  };
+
+  const handleAdjustSave = async () => {
+    if (!adjustModal.type) return;
+    const { school, className, delta } = adjustModal;
+    if (!school || !className) {
+      setAdjustModal(prev => ({ ...prev, error: "Select school and class" }));
+      return;
+    }
+
+    const records = adjustModal.type === "enrollment" ? enrollmentRecords : theologyRecords;
+    const existing = records.find(r => r.school === school && r.class === className && r.term === selectedTerm && r.year === selectedYear);
+    const base = existing?.count || 0;
+    const newCount = Math.max(0, base + delta);
+
+    setAdjustModal(prev => ({ ...prev, saving: true, error: null }));
+    try {
+      const payload = { school, class: className, term: selectedTerm, year: selectedYear, count: newCount };
+      const endpoint = adjustModal.type === "enrollment" ? "/api/enrollment" : "/api/theology-enrollment";
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to save adjustment");
+      }
+      setAdjustModal({ type: null, school: "", className: "", delta: 0, saving: false, error: null });
+      await loadPrefills();
+    } catch (err) {
+      setAdjustModal(prev => ({ ...prev, saving: false, error: err instanceof Error ? err.message : "Failed to save adjustment" }));
+    }
+  };
 
   if (status === "loading") {
     return (
@@ -524,29 +678,51 @@ export default function KPIEntryPage() {
           <div>
             <h3 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-200">Enrollment KPIs</h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Total Enrollment</label>
-                <input
-                  type="number"
-                  name="totalEnrollment"
-                  min="0"
-                  value={formData.totalEnrollment ?? ''}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 font-medium"
-                  placeholder="0"
-                />
+              <div className="space-y-2">
+                <label className="block text-sm font-semibold text-gray-800">Total Enrollment</label>
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 px-4 py-3 border-2 border-gray-200 rounded-lg bg-gray-50 text-gray-900 font-bold text-lg">
+                    {formData.totalEnrollment ?? "—"}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => openAdjust("enrollment")}
+                    className="px-3 py-2 text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100"
+                  >
+                    Adjust
+                  </button>
+                  <button
+                    type="button"
+                    onClick={loadPrefills}
+                    className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
+                  >
+                    Refresh
+                  </button>
+                </div>
+                <p className="text-xs text-gray-600">Prefilled from Enrollment (Year {selectedYear}, Term {selectedTerm})</p>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Theology Enrollment</label>
-                <input
-                  type="number"
-                  name="theologyEnrollment"
-                  min="0"
-                  value={formData.theologyEnrollment ?? ''}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 font-medium"
-                  placeholder="0"
-                />
+              <div className="space-y-2">
+                <label className="block text-sm font-semibold text-gray-800">Theology Enrollment</label>
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 px-4 py-3 border-2 border-gray-200 rounded-lg bg-gray-50 text-gray-900 font-bold text-lg">
+                    {formData.theologyEnrollment ?? "—"}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => openAdjust("theology")}
+                    className="px-3 py-2 text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100"
+                  >
+                    Adjust
+                  </button>
+                  <button
+                    type="button"
+                    onClick={loadPrefills}
+                    className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
+                  >
+                    Refresh
+                  </button>
+                </div>
+                <p className="text-xs text-gray-600">Prefilled from Theology Enrollment (Year {selectedYear}, Term {selectedTerm})</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Admissions</label>
@@ -569,17 +745,26 @@ export default function KPIEntryPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">P7 Prep Exams %</label>
-                <input
-                  type="number"
-                  name="p7PrepExamsPercent"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  value={formData.p7PrepExamsPercent ?? ''}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 font-medium"
-                  placeholder="0-100"
-                />
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 px-4 py-3 border-2 border-gray-200 rounded-lg bg-gray-50 text-gray-900 font-bold text-lg">
+                    {prepPrefill.percent ? `${prepPrefill.percent.toFixed(1)}%` : "—"}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => router.push("/p7-prep-entry")}
+                    className="px-3 py-2 text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100"
+                  >
+                    Edit on Prep Page
+                  </button>
+                  <button
+                    type="button"
+                    onClick={loadPrepPrefill}
+                    className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
+                  >
+                    Refresh
+                  </button>
+                </div>
+                <p className="text-xs text-gray-600 mt-1">Showing {prepPrefill.label} Div I % for Year {selectedYear}, Term {selectedTerm}.</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Syllabus Coverage %</label>
@@ -616,6 +801,73 @@ export default function KPIEntryPage() {
             </button>
           </div>
         </form>
+
+        {/* Adjust Modal */}
+        {adjustModal.type && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/40" onClick={() => setAdjustModal({ type: null, school: "", className: "", delta: 0, saving: false, error: null })} />
+            <div className="relative bg-white border border-gray-200 rounded-lg shadow-lg w-full max-w-md p-6 space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900">Adjust {adjustModal.type === "enrollment" ? "Enrollment" : "Theology Enrollment"}</h3>
+              <div className="grid grid-cols-1 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">School</label>
+                  <select
+                    value={adjustModal.school}
+                    onChange={(e) => setAdjustModal(prev => ({ ...prev, school: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  >
+                    <option value="">Select school</option>
+                    {schools.map((s) => (
+                      <option key={s.id} value={s.name}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Class</label>
+                  <select
+                    value={adjustModal.className}
+                    onChange={(e) => setAdjustModal(prev => ({ ...prev, className: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  >
+                    <option value="">Select class</option>
+                    {CLASSES.map((cls) => (
+                      <option key={cls} value={cls}>{cls}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Delta (increase/decrease)</label>
+                  <input
+                    type="number"
+                    value={adjustModal.delta}
+                    onChange={(e) => setAdjustModal(prev => ({ ...prev, delta: Number(e.target.value) }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  />
+                  <p className="text-xs text-gray-600 mt-1">Applies to Year {selectedYear}, Term {selectedTerm}. New count = current + delta (floors at 0).</p>
+                </div>
+              </div>
+              {adjustModal.error && <p className="text-sm text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded">{adjustModal.error}</p>}
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setAdjustModal({ type: null, school: "", className: "", delta: 0, saving: false, error: null })}
+                  className="px-4 py-2 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200"
+                  disabled={adjustModal.saving}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAdjustSave}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400"
+                  disabled={adjustModal.saving}
+                >
+                  {adjustModal.saving ? "Saving..." : "Save"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Existing Data Summary & Manage */}
         <div className="bg-white mt-6 p-6 rounded-lg shadow-sm border border-gray-200">

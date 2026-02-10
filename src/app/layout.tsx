@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "./providers";
+import OfflineIndicator from "@/components/OfflineIndicator";
 
 export const metadata: Metadata = {
   title: "General Managers Report",
@@ -28,7 +29,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <Providers>{children}</Providers>
+        <Providers>
+          <OfflineIndicator />
+          {children}
+        </Providers>
       </body>
     </html>
   );

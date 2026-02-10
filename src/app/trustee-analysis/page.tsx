@@ -4,7 +4,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
-import { SchoolIcon } from "@heroicons/react/24/outline";
+import { AcademicCapIcon } from "@heroicons/react/24/outline";
 
 interface Comparison {
   metric: string;

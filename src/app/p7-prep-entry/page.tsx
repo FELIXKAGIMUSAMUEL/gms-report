@@ -14,10 +14,12 @@ interface P7PrepResult {
   term: number;
   year: number;
   enrollment: number;
+  agg4: number;  // Students with aggregates 4-12
   divisionI: number;
   divisionII: number;
   divisionIII: number;
   divisionIV: number;
+  divisionU: number;  // Ungraded students
   averageScore: number;
 }
 
@@ -51,10 +53,12 @@ export default function P7PrepEntryPage() {
   const [selectedPrep, setSelectedPrep] = useState<number>(1);
   const [currentEntryData, setCurrentEntryData] = useState({
     enrollment: 0,
+    agg4: 0,
     divisionI: 0,
     divisionII: 0,
     divisionIII: 0,
     divisionIV: 0,
+    divisionU: 0,
     averageScore: 0,
   });
 
@@ -162,10 +166,12 @@ export default function P7PrepEntryPage() {
           term: autoTerm,
           year: selectedYear,
           enrollment: currentEntryData.enrollment,
+          agg4: currentEntryData.agg4,
           divisionI: currentEntryData.divisionI,
           divisionII: currentEntryData.divisionII,
           divisionIII: currentEntryData.divisionIII,
           divisionIV: currentEntryData.divisionIV,
+          divisionU: currentEntryData.divisionU,
           averageScore,
         }),
       });
@@ -190,10 +196,12 @@ export default function P7PrepEntryPage() {
       // Clear current entry
       setCurrentEntryData({
         enrollment: 0,
+        agg4: 0,
         divisionI: 0,
         divisionII: 0,
         divisionIII: 0,
         divisionIV: 0,
+        divisionU: 0,
         averageScore: 0,
       });
       setSelectedSchool("");
@@ -321,10 +329,12 @@ export default function P7PrepEntryPage() {
     setSelectedPrep(prepNumber);
     setCurrentEntryData({
       enrollment: data.enrollment,
+      agg4: data.agg4 || 0,
       divisionI: data.divisionI,
       divisionII: data.divisionII,
       divisionIII: data.divisionIII,
       divisionIV: data.divisionIV,
+      divisionU: data.divisionU || 0,
       averageScore: data.averageScore,
     });
     
@@ -337,13 +347,15 @@ export default function P7PrepEntryPage() {
     PREP_NUMBERS.forEach(prep => {
       schools.forEach(school => {
         templateData.push({
-          School: school,
+          School: school.name,
           Prep: prep,
           Enrollment: 0,
+          "Agg 4": 0,
           "Division I": 0,
           "Division II": 0,
           "Division III": 0,
           "Division IV": 0,
+          "Ungraded (U)": 0,
         });
       });
     });
@@ -352,6 +364,8 @@ export default function P7PrepEntryPage() {
     ws['!cols'] = [
       { wch: 20 },
       { wch: 6 },
+      { wch: 12 },
+      { wch: 10 },
       { wch: 12 },
       { wch: 12 },
       { wch: 12 },
@@ -389,10 +403,12 @@ export default function P7PrepEntryPage() {
         if (!school || prep === undefined) continue;
 
         const prepNumber = parseInt(prep);
+        const agg4 = parseInt(row["Agg 4"] || row["AGG 4"] || row["agg4"] || 0);
         const divisionI = parseInt(row["Division I"] || 0);
         const divisionII = parseInt(row["Division II"] || 0);
         const divisionIII = parseInt(row["Division III"] || 0);
         const divisionIV = parseInt(row["Division IV"] || 0);
+        const divisionU = parseInt(row["Ungraded (U)"] || row["Ungraded"] || row["U"] || 0);
         const averageScore = calculateAverageScore(divisionI, divisionII, divisionIII, divisionIV);
 
         // Automatically determine term based on prep number
@@ -407,10 +423,12 @@ export default function P7PrepEntryPage() {
             term: autoTerm,
             year: selectedYear,
             enrollment: parseInt(row.Enrollment || 0),
+            agg4,
             divisionI,
             divisionII,
             divisionIII,
             divisionIV,
+            divisionU,
             averageScore,
           }),
         });
@@ -444,16 +462,20 @@ export default function P7PrepEntryPage() {
       School: result.school,
       Prep: result.prepNumber,
       Enrollment: result.enrollment,
+      "Agg 4": result.agg4 || 0,
       "Division I": result.divisionI,
       "Division II": result.divisionII,
       "Division III": result.divisionIII,
       "Division IV": result.divisionIV,
+      "Ungraded (U)": result.divisionU || 0,
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
     ws['!cols'] = [
       { wch: 20 },
       { wch: 6 },
+      { wch: 12 },
+      { wch: 10 },
       { wch: 12 },
       { wch: 12 },
       { wch: 12 },
@@ -646,8 +668,8 @@ export default function P7PrepEntryPage() {
                   Results for {selectedSchool} - Prep {selectedPrep}
                 </h3>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
-                  <div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+                  < div>
                     <label className="block text-sm font-semibold text-gray-700 mb-1">Enrollment</label>
                     <input
                       type="number"
@@ -655,6 +677,17 @@ export default function P7PrepEntryPage() {
                       value={currentEntryData.enrollment}
                       onChange={(e) => setCurrentEntryData(prev => ({ ...prev, enrollment: parseInt(e.target.value) || 0 }))}
                       className="w-full px-3 py-2 text-center border-2 border-gray-400 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 font-semibold bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Agg 4</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={currentEntryData.agg4}
+                      onChange={(e) => setCurrentEntryData(prev => ({ ...prev, agg4: parseInt(e.target.value) || 0 }))}
+                      className="w-full px-3 py-2 text-center border-2 border-blue-400 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 font-semibold bg-blue-50"
+                      title="Students with aggregates 4-12"
                     />
                   </div>
                   <div>
@@ -698,6 +731,17 @@ export default function P7PrepEntryPage() {
                     />
                   </div>
                   <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Ungraded (U)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={currentEntryData.divisionU}
+                      onChange={(e) => setCurrentEntryData(prev => ({ ...prev, divisionU: parseInt(e.target.value) || 0 }))}
+                      className="w-full px-3 py-2 text-center border-2 border-red-400 rounded-lg focus:ring-2 focus:ring-red-500 text-gray-900 font-semibold bg-red-50"
+                      title="Ungraded students"
+                    />
+                  </div>
+                  <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-1">Avg Score (0-100)</label>
                     <input
                       type="number"
@@ -712,10 +756,10 @@ export default function P7PrepEntryPage() {
                 </div>
 
                 {/* Validation message */}
-                {currentEntryData.divisionI + currentEntryData.divisionII + currentEntryData.divisionIII + currentEntryData.divisionIV > currentEntryData.enrollment && (
+                {currentEntryData.divisionI + currentEntryData.divisionII + currentEntryData.divisionIII + currentEntryData.divisionIV + currentEntryData.divisionU > currentEntryData.enrollment && (
                   <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg mb-4">
                     <p className="text-yellow-800 text-sm font-medium">
-                      ⚠️ Sum of divisions ({currentEntryData.divisionI + currentEntryData.divisionII + currentEntryData.divisionIII + currentEntryData.divisionIV}) exceeds enrollment ({currentEntryData.enrollment})
+                      ⚠️ Sum of divisions ({currentEntryData.divisionI + currentEntryData.divisionII + currentEntryData.divisionIII + currentEntryData.divisionIV + currentEntryData.divisionU}) exceeds enrollment ({currentEntryData.enrollment})
                     </p>
                   </div>
                 )}
@@ -733,10 +777,12 @@ export default function P7PrepEntryPage() {
                       setSelectedSchool("");
                       setCurrentEntryData({
                         enrollment: 0,
+                        agg4: 0,
                         divisionI: 0,
                         divisionII: 0,
                         divisionIII: 0,
                         divisionIV: 0,
+                        divisionU: 0,
                         averageScore: 0,
                       });
                     }}

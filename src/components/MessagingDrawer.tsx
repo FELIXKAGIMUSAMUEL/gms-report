@@ -1,11 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import {
   XMarkIcon,
   PaperAirplaneIcon,
   ChatBubbleOvalLeftIcon,
   ArrowPathIcon,
+  PaperClipIcon,
+  DocumentIcon,
+  ArrowDownTrayIcon,
+  XCircleIcon,
+  TrashIcon,
 } from "@heroicons/react/24/outline";
 
 interface UserSummary {
@@ -22,6 +27,9 @@ interface MessageItem {
   recipientId: string;
   isRead: boolean;
   createdAt: string;
+  attachmentUrl?: string | null;
+  attachmentName?: string | null;
+  attachmentType?: string | null;
   sender: { id: string; name: string; email: string };
   recipient: { id: string; name: string; email: string };
 }
@@ -47,6 +55,10 @@ export default function MessagingDrawer({
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [filePreview, setFilePreview] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchRecipients = useCallback(async () => {
     try {
@@ -124,21 +136,126 @@ export default function MessagingDrawer({
   }, [open, activeRecipientId, messages, markConversationAsRead]);
 
   const sendMessage = async () => {
-    if (!draft.trim() || !activeRecipientId) return;
+    if ((!draft.trim() && !selectedFile) || !activeRecipientId) return;
+    
     try {
       setSending(true);
+      
+      let attachmentData = null;
+      
+      // Upload file first if one is selected
+      if (selectedFile) {
+        setUploading(true);
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+        
+        const uploadResponse = await fetch('/api/messages/upload', {
+          method: 'POST',
+          body: formData,
+        });
+        
+        if (!uploadResponse.ok) {
+          const error = await uploadResponse.json();
+          throw new Error(error.error || 'File upload failed');
+        }
+        
+        attachmentData = await uploadResponse.json();
+        setUploading(false);
+      }
+      
+      // Send message with or without attachment
       await fetch("/api/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: draft.trim(), recipientId: activeRecipientId }),
+        body: JSON.stringify({ 
+          content: draft.trim(), 
+          recipientId: activeRecipientId,
+          attachmentUrl: attachmentData?.url,
+          attachmentName: attachmentData?.filename,
+          attachmentType: attachmentData?.type,
+        }),
       });
+      
       setDraft("");
+      setSelectedFile(null);
+      setFilePreview(null);
       await fetchMessages();
       onMessageSent?.();
     } catch (error) {
       console.error("Error sending message", error);
+      alert(error instanceof Error ? error.message : "Failed to send message");
     } finally {
       setSending(false);
+      setUploading(false);
+    }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // 10MB limit
+    if (file.size > 10 * 1024 * 1024) {
+      alert('File size must be less than 10MB');
+      return;
+    }
+
+    setSelectedFile(file);
+
+    // Generate preview for images
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFilePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      setFilePreview(null);
+    }
+  };
+
+  const clearFile = () => {
+    setSelectedFile(null);
+    setFilePreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const getFileIcon = (type: string) => {
+    if (type.startsWith('image/')) return '🖼️';
+    if (type === 'application/pdf') return '📄';
+    if (type.includes('word')) return '📝';
+    if (type.includes('excel') || type.includes('spreadsheet')) return '📊';
+    return '📎';
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+  };
+
+  const deleteMessage = async (messageId: string) => {
+    if (!confirm('Delete this message?')) return;
+    
+    try {
+      const response = await fetch('/api/messages', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId }),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to delete message');
+      }
+      
+      // Remove message from local state
+      setMessages(prev => prev.filter(m => m.id !== messageId));
+    } catch (error) {
+      console.error('Error deleting message:', error);
+      alert(error instanceof Error ? error.message : 'Failed to delete message');
     }
   };
 
@@ -232,17 +349,77 @@ export default function MessagingDrawer({
                   )}
                   {conversation.map((message) => {
                     const isMine = message.senderId === currentUserId;
+                    const hasAttachment = !!message.attachmentUrl;
+                    
                     return (
-                      <div key={message.id} className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
-                        <div
-                          className={`max-w-[80%] rounded-2xl px-4 py-3 shadow-sm ${
-                            isMine ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-900"
-                          }`}
-                        >
-                          <p className="text-sm whitespace-pre-line">{message.content}</p>
-                          <p className={`text-[11px] mt-2 ${isMine ? "text-blue-50" : "text-gray-500"}`}>
-                            {new Date(message.createdAt).toLocaleString()}
-                          </p>
+                      <div key={message.id} className={`flex ${isMine ? "justify-end" : "justify-start"} group`}>
+                        <div className="relative">
+                          <div
+                            className={`max-w-[80%] rounded-2xl px-4 py-3 shadow-sm ${
+                              isMine ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-900"
+                            }`}
+                          >
+                            {/* File attachment preview */}
+                            {hasAttachment && (
+                              <div className={`mb-2 rounded-lg overflow-hidden ${
+                                isMine ? 'bg-blue-700' : 'bg-gray-200'
+                              }`}>
+                                {message.attachmentType?.startsWith('image/') ? (
+                                  <a 
+                                    href={message.attachmentUrl!} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="block"
+                                  >
+                                    <img 
+                                      src={message.attachmentUrl!} 
+                                      alt={message.attachmentName || 'Attachment'} 
+                                      className="max-w-full max-h-64 object-contain cursor-pointer hover:opacity-90"
+                                    />
+                                  </a>
+                                ) : (
+                                  <a
+                                    href={message.attachmentUrl!}
+                                    download={message.attachmentName}
+                                    className={`flex items-center gap-3 p-3 hover:opacity-80 transition-opacity ${
+                                      isMine ? 'text-white' : 'text-gray-900'
+                                    }`}
+                                  >
+                                    <DocumentIcon className="w-8 h-8 flex-shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium truncate">
+                                        {message.attachmentName || 'File'}
+                                      </p>
+                                      <p className={`text-xs ${isMine ? 'text-blue-100' : 'text-gray-500'}`}>
+                                        {getFileIcon(message.attachmentType || '')} {message.attachmentType?.split('/')[1]?.toUpperCase()}
+                                      </p>
+                                    </div>
+                                    <ArrowDownTrayIcon className="w-5 h-5 flex-shrink-0" />
+                                  </a>
+                                )}
+                              </div>
+                            )}
+                            
+                            {/* Message text */}
+                            {message.content && (
+                              <p className="text-sm whitespace-pre-line">{message.content}</p>
+                            )}
+                            
+                            {/* Timestamp */}
+                            <p className={`text-[11px] mt-2 ${isMine ? "text-blue-50" : "text-gray-500"}`}>
+                              {new Date(message.createdAt).toLocaleString()}
+                            </p>
+                          </div>
+                          
+                          {/* Delete button - shows on hover */}
+                          <button
+                            onClick={() => deleteMessage(message.id)}
+                            className={`absolute top-1 ${isMine ? 'left-[-32px]' : 'right-[-32px]'} p-1.5 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 hover:bg-red-600 transition-all shadow-md`}
+                            title="Delete message"
+                            aria-label="Delete message"
+                          >
+                            <TrashIcon className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
                     );
@@ -256,27 +433,83 @@ export default function MessagingDrawer({
             </div>
 
             <div className="border-t bg-white p-3">
-              <div className="flex items-center gap-2">
+              {/* File preview */}
+              {selectedFile && (
+                <div className="mb-2 p-2 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="flex items-center gap-2">
+                    {filePreview ? (
+                      <img src={filePreview} alt="Preview" className="w-12 h-12 object-cover rounded" />
+                    ) : (
+                      <DocumentIcon className="w-12 h-12 text-gray-400" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{selectedFile.name}</p>
+                      <p className="text-xs text-gray-500">{formatFileSize(selectedFile.size)}</p>
+                    </div>
+                    <button
+                      onClick={clearFile}
+                      className="p-1 hover:bg-gray-200 rounded-full transition-colors"
+                      title="Remove file"
+                    >
+                      <XCircleIcon className="w-5 h-5 text-gray-500" />
+                    </button>
+                  </div>
+                </div>
+              )}
+              
+              <div className="flex items-end gap-2">
                 <textarea
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      sendMessage();
+                    }
+                  }}
                   placeholder={activeRecipient ? "Write a message..." : "Choose someone to message"}
-                  className="flex-1 resize-none rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                  className="flex-1 resize-none rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   rows={2}
                   disabled={!activeRecipient}
                 />
-                <button
-                  onClick={sendMessage}
-                  disabled={!activeRecipient || sending || draft.trim().length === 0}
-                  className={`p-3 rounded-lg text-white shadow-sm flex items-center justify-center ${
-                    !activeRecipient || draft.trim().length === 0
-                      ? "bg-blue-300 cursor-not-allowed"
-                      : "bg-blue-600 hover:bg-blue-700"
-                  }`}
-                  aria-label="Send message"
-                >
-                  <PaperAirplaneIcon className={`h-5 w-5 ${sending ? "animate-pulse" : ""}`} />
-                </button>
+                
+                {/* File upload button */}
+                <div className="flex gap-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv"
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={!activeRecipient || uploading}
+                    className="p-3 rounded-lg border-2 border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    aria-label="Attach file"
+                    title="Attach file (Max 10MB)"
+                  >
+                    <PaperClipIcon className="h-5 w-5" />
+                  </button>
+                  
+                  {/* Send button */}
+                  <button
+                    onClick={sendMessage}
+                    disabled={!activeRecipient || (sending || uploading) || (!draft.trim() && !selectedFile)}
+                    className={`p-3 rounded-lg text-white shadow-sm flex items-center justify-center ${
+                      !activeRecipient || (!draft.trim() && !selectedFile)
+                        ? "bg-blue-300 cursor-not-allowed"
+                        : "bg-blue-600 hover:bg-blue-700"
+                    }`}
+                    aria-label="Send message"
+                  >
+                    {uploading ? (
+                      <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <PaperAirplaneIcon className={`h-5 w-5 ${sending ? "animate-pulse" : ""}`} />
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           </section>

@@ -47,6 +47,7 @@ import NotificationBell from "./NotificationBell";
 import MessagingDrawer from "./MessagingDrawer";
 import GlobalSearch from "./GlobalSearch";
 import AlertsPanel from "./AlertsPanel";
+import PushNotificationManager from "./PushNotificationManager";
 
 interface LayoutProps {
   children: ReactNode;
@@ -76,10 +77,11 @@ export default function DashboardLayout({
   const userRole = session?.user?.role;
   const portalTitle = userRole === "TRUSTEE" ? "Trustee Portal" : "GM Report Portal";
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [updateReportOpen, setUpdateReportOpen] = useState(pathname.includes("-entry"));
+  const isP7EntryPath = pathname === "/p7-entry" || pathname.startsWith("/p7-prep");
+  const [updateReportOpen, setUpdateReportOpen] = useState(pathname.includes("-entry") && !isP7EntryPath);
   const [enrollmentOpen, setEnrollmentOpen] = useState(pathname.includes("enrollment") && !pathname.includes("theology"));
   const [theologyOpen, setTheologyOpen] = useState(pathname.includes("theology"));
-  const [p7prepOpen, setP7PrepOpen] = useState(pathname.includes("p7-prep"));
+  const [p7prepOpen, setP7PrepOpen] = useState(isP7EntryPath);
   const [trusteeHubOpen, setTrusteeHubOpen] = useState(pathname.includes("trustee-"));
   const [messagingOpen, setMessagingOpen] = useState(false);
   const [unreadMessages, setUnreadMessages] = useState(0);
@@ -169,7 +171,7 @@ export default function DashboardLayout({
     { name: "Enter Data", href: "#", icon: DocumentPlusIcon, show: isGM, isDropdown: true, dropdownKey: "updateReport" },
     { name: "Schools Enrollment", href: "#", icon: UserGroupIcon, show: true, isDropdown: true, dropdownKey: "enrollment" },
     { name: "Theology Enrollment", href: "#", icon: AcademicCapIcon, show: true, isDropdown: true, dropdownKey: "theology" },
-    { name: "P.7 Prep Tracking", href: "#", icon: AcademicCapIcon, show: true, isDropdown: true, dropdownKey: "p7prep" },
+    { name: "P.7 Prep & PLE", href: "#", icon: AcademicCapIcon, show: true, isDropdown: true, dropdownKey: "p7prep" },
     { name: "Analytics", href: "/analytics", icon: ChartBarIcon, show: true },
     { name: "Past Reports", href: "/past-reports", icon: ClockIcon, show: true },
     { name: "Trustee Hub", href: "#", icon: SparklesIcon, show: isTrustee, isDropdown: true, dropdownKey: "trusteeHub" },
@@ -179,7 +181,6 @@ export default function DashboardLayout({
 
   const updateReportSections = [
     { name: "KPI Entry", href: "/kpi-entry", icon: ChartBarIcon },
-    { name: "P7 Prep Entry", href: "/p7-entry", icon: AcademicCapIcon },
     { name: "Events Management", href: "/events-entry", icon: CalendarIcon },
     { name: "Projects Management", href: "/projects-entry", icon: RocketLaunchIcon },
     { name: "Issues Management", href: "/issues-entry", icon: ExclamationTriangleIcon },
@@ -204,6 +205,8 @@ export default function DashboardLayout({
 
   // P.7 Prep sections - showing only entry for GM, only analysis for Trustee
   const p7PrepSections = isGM ? [
+    { name: "PLE Tracking", href: "/p7-entry", icon: AcademicCapIcon, description: "Enter PLE overall summary by school and year" },
+    { name: "P.6 Promotion Entry", href: "/p6-promotion-entry", icon: AcademicCapIcon, description: "Capture P.6 promotion results and API/rank" },
     { name: "P.7 Prep Results Tracking", href: "/p7-prep-entry", icon: DocumentPlusIcon, description: "Enter division results and average scores for each prep exam" },
     { name: "P.7 Prep Analysis", href: "/p7-prep-analysis", icon: ChartBarIcon, description: "Prep trends, school rankings, and performance analysis" },
   ] : [
@@ -231,9 +234,9 @@ export default function DashboardLayout({
       {/* Top Navbar */}
       <nav className="bg-white border-b border-gray-200 shadow-sm z-30">
         <div className="px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center min-h-16 py-2 gap-3 sm:gap-4">
             {/* Left: Logo and Mobile Menu Button */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 min-w-0 flex-wrap sm:flex-nowrap">
               <button
                 onClick={() => setSidebarOpen(true)}
                 className="md:hidden p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
@@ -243,11 +246,11 @@ export default function DashboardLayout({
               
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center shadow-md">
-                  <span className="text-white font-bold text-xl">{userRole === "TRUSTEE" ? "TR" : "GM"}</span>
+                  <span className="text-white font-bold text-base sm:text-xl leading-none">{userRole === "TRUSTEE" ? "TR" : "GM"}</span>
                 </div>
-                <div className="hidden sm:block">
-                  <h1 className="text-lg font-bold text-gray-900">{portalTitle}</h1>
-                  <p className="text-xs text-gray-500">SAK General Managers Report</p>
+                <div className="hidden sm:block min-w-0">
+                  <h1 className="text-sm sm:text-base md:text-lg font-bold text-gray-900 truncate max-w-[14rem] lg:max-w-none">{portalTitle}</h1>
+                  <p className="text-[10px] sm:text-xs md:text-sm text-gray-500 truncate max-w-[14rem] lg:max-w-none">SAK General Managers Report</p>
                 </div>
               </div>
             </div>
@@ -305,8 +308,10 @@ export default function DashboardLayout({
             )}
 
             {/* Right: User Info and Actions */}
-            <div className="flex items-center gap-4">
-              <GlobalSearch />
+            <div className="flex items-center gap-3 sm:gap-4 flex-wrap sm:flex-nowrap justify-end">
+              <div className="hidden sm:block">
+                <GlobalSearch />
+              </div>
               <AlertsPanel />
               <NotificationBell />
               <button
@@ -332,7 +337,7 @@ export default function DashboardLayout({
                   <p className="text-sm font-semibold text-gray-900">{session.user.name}</p>
                   <p className="text-xs text-gray-500">{session.user.role}</p>
                 </div>
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-lg shadow-md ring-2 ring-white">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-base sm:text-lg shadow-md ring-2 ring-white">
                   {session.user.name?.[0]}
                 </div>
               </a>
@@ -372,10 +377,10 @@ export default function DashboardLayout({
                         }
                       }}
                       className={`w-full group flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                        (item.dropdownKey === "updateReport" && pathname.includes("-entry")) ||
+                        (item.dropdownKey === "updateReport" && pathname.includes("-entry") && !isP7EntryPath) ||
                         (item.dropdownKey === "enrollment" && pathname.includes("enrollment") && !pathname.includes("theology")) ||
                         (item.dropdownKey === "theology" && pathname.includes("theology")) ||
-                        (item.dropdownKey === "p7prep" && pathname.includes("p7-prep")) ||
+                        (item.dropdownKey === "p7prep" && isP7EntryPath) ||
                         (item.dropdownKey === "trusteeHub" && pathname.includes("trustee-"))
                           ? "bg-blue-50 text-blue-700"
                           : "text-gray-700 hover:bg-gray-100"
@@ -552,10 +557,10 @@ export default function DashboardLayout({
                             }
                           }}
                           className={`w-full group flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
-                            (item.dropdownKey === "updateReport" && pathname.includes("-entry")) ||
+                            (item.dropdownKey === "updateReport" && pathname.includes("-entry") && !isP7EntryPath) ||
                             (item.dropdownKey === "enrollment" && pathname.includes("enrollment") && !pathname.includes("theology")) ||
                             (item.dropdownKey === "theology" && pathname.includes("theology")) ||
-                            (item.dropdownKey === "p7prep" && pathname.includes("p7-prep")) ||
+                            (item.dropdownKey === "p7prep" && isP7EntryPath) ||
                             (item.dropdownKey === "trusteeHub" && pathname.includes("trustee-"))
                               ? "bg-blue-50 text-blue-700 shadow-sm"
                               : "text-gray-700 hover:bg-gray-50 hover:text-blue-600"
@@ -563,10 +568,10 @@ export default function DashboardLayout({
                         >
                           <div className="flex items-center">
                             <item.icon className={`mr-3 h-5 w-5 ${
-                              (item.dropdownKey === "updateReport" && pathname.includes("-entry")) ||
+                              (item.dropdownKey === "updateReport" && pathname.includes("-entry") && !isP7EntryPath) ||
                               (item.dropdownKey === "enrollment" && pathname.includes("enrollment") && !pathname.includes("theology")) ||
                               (item.dropdownKey === "theology" && pathname.includes("theology")) ||
-                              (item.dropdownKey === "p7prep" && pathname.includes("p7-prep")) ||
+                              (item.dropdownKey === "p7prep" && isP7EntryPath) ||
                               (item.dropdownKey === "trusteeHub" && pathname.includes("trustee-"))
                                 ? "text-blue-600" 
                                 : "text-gray-400"
@@ -709,6 +714,7 @@ export default function DashboardLayout({
         onMessageSent={refreshUnreadMessages}
         onMessagesRead={refreshUnreadMessages}
       />
+      <PushNotificationManager />
     </div>
   );
 }

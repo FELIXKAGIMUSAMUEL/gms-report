@@ -20,6 +20,7 @@ model User {
   notifications    Notification[]
   reactions        Reaction[]
   todos            Todo[]
+  pushSubscriptions PushSubscription[]
 }
 
 model WeeklyReport {
@@ -117,8 +118,11 @@ model OtherIncome {
   percentage Float    @default(0)
   month      Int      @default(1)
   amount     Float    @default(0)
+  term       Int      @default(1)
+  week       Int?
 
-  @@index([year, month])
+  @@index([year, term, month])
+  @@index([year, term, week])
   @@index([source])
 }
 
@@ -149,10 +153,12 @@ model P7PrepResult {
   term         Int
   year         Int
   enrollment   Int      @default(0)
+  agg4         Int      @default(0)  // Students with aggregates 4-12
   divisionI    Int      @default(0)
   divisionII   Int      @default(0)
   divisionIII  Int      @default(0)
   divisionIV   Int      @default(0)
+  divisionU    Int      @default(0)  // Ungraded students
   averageScore Float    @default(0)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -162,6 +168,52 @@ model P7PrepResult {
   @@index([year, term])
   @@index([prepNumber])
   @@index([school, year, term])
+}
+
+model P7PleResult {
+  id          String   @id @default(cuid())
+  school      String
+  year        Int
+  popn        Int      @default(0)
+  agg4        Int      @default(0)
+  divisionI   Int      @default(0)
+  divisionII  Int      @default(0)
+  divisionIII Int      @default(0)
+  divisionIV  Int      @default(0)
+  divisionU   Int      @default(0)
+  api         Float    @default(0)
+  rank        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([school, year])
+  @@index([school])
+  @@index([year])
+}
+
+model P6PromotionResult {
+  id          String   @id @default(cuid())
+  school      String
+  year        Int
+  setNumber   Int
+  popn        Int      @default(0)
+  absences    Int      @default(0)
+  actualPopn  Int      @default(0)
+  agg4        Int      @default(0)
+  divisionI   Int      @default(0)
+  divisionII  Int      @default(0)
+  divisionIII Int      @default(0)
+  divisionIV  Int      @default(0)
+  ungraded    Int      @default(0)
+  api         Float    @default(0)
+  rank        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([school, year, setNumber])
+  @@index([year])
+  @@index([year, setNumber])
+  @@index([school, year])
 }
 
 model UpcomingEvent {
@@ -256,16 +308,19 @@ model TheologyEnrollment {
 }
 
 model Message {
-  id          String    @id @default(cuid())
-  content     String
-  senderId    String
-  recipientId String
-  isRead      Boolean   @default(false)
-  readAt      DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  recipient   User      @relation("ReceivedMessages", fields: [recipientId], references: [id], onDelete: Cascade)
-  sender      User      @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  id            String    @id @default(cuid())
+  content       String
+  senderId      String
+  recipientId   String
+  isRead        Boolean   @default(false)
+  readAt        DateTime?
+  attachmentUrl String?   // File attachment URL
+  attachmentName String?  // Original filename
+  attachmentType String?  // File MIME type
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  recipient     User      @relation("ReceivedMessages", fields: [recipientId], references: [id], onDelete: Cascade)
+  sender        User      @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
 
   @@index([senderId])
   @@index([recipientId])
@@ -290,6 +345,23 @@ model Notification {
   @@index([isRead])
   @@index([type])
   @@index([createdAt])
+}
+
+model PushSubscription {
+  id         String   @id @default(cuid())
+  userId     String
+  endpoint   String   @unique
+  auth       String
+  p256dh     String
+  userAgent  String?
+  deviceName String?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isActive])
 }
 
 model Todo {

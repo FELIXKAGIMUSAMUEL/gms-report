@@ -188,6 +188,8 @@ export default function Dashboard() {
 	const [scorecards, setScorecards] = useState<WeeklyScorecard[]>([]);
 	const [p7Data, setP7Data] = useState<P7CohortData[]>([]);
 	const [p7PrepResults, setP7PrepResults] = useState<any[]>([]);
+	const [p7PleResults, setP7PleResults] = useState<any[]>([]);
+	const [p6PromotionResults, setP6PromotionResults] = useState<any[]>([]);
 	const [issues, setIssues] = useState<RedIssue[]>([]);
 	const [events, setEvents] = useState<UpcomingEvent[]>([]);
 	const [projects, setProjects] = useState<GMProject[]>([]);
@@ -206,18 +208,31 @@ export default function Dashboard() {
 	const [p7ChartType, setP7ChartType] = useState<"line" | "bar">("line"); // Chart type toggle
 	const [enrollmentSchoolFilter, setEnrollmentSchoolFilter] = useState<string>("ALL"); // School filter for enrollment chart
 	const [enrollmentClassFilter, setEnrollmentClassFilter] = useState<string>("ALL"); // Class filter for enrollment chart
+	const [enrollmentTermFilter, setEnrollmentTermFilter] = useState<number | "ALL">("ALL"); // Term filter for enrollment chart
 	const [incomeYearFilter, setIncomeYearFilter] = useState<number | "ALL">("ALL"); // Year filter for income
+	const [incomeTermFilter, setIncomeTermFilter] = useState<number | "ALL">("ALL"); // Term filter for income
 	const [incomeSourceFilter, setIncomeSourceFilter] = useState<string>("ALL"); // Source filter for income
-	const [incomeDisplayMode, setIncomeDisplayMode] = useState<"amount" | "percentage">("amount"); // Display mode for income
+	const [incomeDisplayMode, setIncomeDisplayMode] = useState<"amount" | "percentage">("percentage"); // Display mode for income
+	const [incomeChartView, setIncomeChartView] = useState<"by-year" | "total">("by-year"); // Chart view mode
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+	const [refreshTick, setRefreshTick] = useState(0);
+	const [isRefreshing, setIsRefreshing] = useState(false);
+	const [hasFetchedOnce, setHasFetchedOnce] = useState(false);
 	const [selectionInitialized, setSelectionInitialized] = useState(false);
 	const [eventStatusFilter, setEventStatusFilter] = useState<"ACTIVE" | "COMPLETED" | "ALL">("ALL");
+	const [eventPriorityFilter, setEventPriorityFilter] = useState<string>("ALL");
+	const [completedEventIds, setCompletedEventIds] = useState<Set<string>>(new Set());
 	const [incomeSourceDeleting, setIncomeSourceDeleting] = useState<string | null>(null);
 	const [todos, setTodos] = useState<Todo[]>([]);
 	const [newTodo, setNewTodo] = useState({ title: "", description: "", dueDate: "", priority: "MEDIUM", category: "GENERAL" });
 	const [showTodoForm, setShowTodoForm] = useState(false);
 	const [projectStatusFilter, setProjectStatusFilter] = useState<"ALL" | "OPEN" | "IN_PROGRESS" | "COMPLETED">("ALL");
+	const [issueStatusFilter, setIssueStatusFilter] = useState<"ALL" | "OPEN" | "IN_PROGRESS" | "RESOLVED">("ALL");
+	const [issueAssigneeFilter, setIssueAssigneeFilter] = useState<string>("ALL");
+	const [issueSort, setIssueSort] = useState<"NEWEST" | "OLDEST" | "LONGEST_OPEN">("NEWEST");
+	const [updatingIssueId, setUpdatingIssueId] = useState<string | null>(null);
 
 	const [showEnrollmentForm, setShowEnrollmentForm] = useState(false);
 	const [enrollmentForm, setEnrollmentForm] = useState({
@@ -258,6 +273,7 @@ export default function Dashboard() {
 	useEffect(() => {
 		const fetchData = async () => {
 			try {
+				setIsRefreshing(true);
 				setLoading(true);
 				setError(null);
 
@@ -289,7 +305,7 @@ export default function Dashboard() {
 				term: String(prevTerm),
 			});
 
-const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sourcesRes, incomesRes, theologyRes, previousTheologyRes, enrollmentRes, previousEnrollmentRes, reactionsRes, todosRes, p7PrepRes] = await Promise.all([
+const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sourcesRes, incomesRes, theologyRes, previousTheologyRes, enrollmentRes, previousEnrollmentRes, reactionsRes, todosRes, p7PrepRes, p7PleRes, p6PromotionRes] = await Promise.all([
 			fetch("/api/reports"),
 			fetch(`/api/scorecard?${scorecardsParams.toString()}`),
 			fetch("/api/p7-prep"),
@@ -304,19 +320,22 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 			fetch(`/api/enrollment?${previousEnrollmentParams.toString()}`),
 			fetch("/api/reactions"),
 			fetch("/api/todos"),
-			fetch("/api/p7-prep-results", { cache: 'no-store' }),
+			fetch("/api/p7-prep-results", { cache: "no-store" }),
+			fetch("/api/p7-ple-results", { cache: "no-store" }),
+			fetch("/api/p6-promotion-results", { cache: "no-store" }),
 			]);
 
 			if (!reportsRes.ok) throw new Error("Failed to fetch reports");
 			if (!scorecardsRes.ok) throw new Error("Failed to fetch scorecards");
 			if (!p7Res.ok) throw new Error("Failed to fetch P7 data");
-			if (!issuesRes.ok) throw new Error("Failed to fetch issues");
 
 			const reportsData = await reportsRes.json();
 			const scorecardsData = await scorecardsRes.json();
 			const p7ResponseData = await p7Res.json();
 			const p7PrepData = p7PrepRes.ok ? await p7PrepRes.json() : [];
-			const issuesData = await issuesRes.json();
+			const p7PleData = p7PleRes.ok ? await p7PleRes.json() : [];
+			const p6PromotionData = p6PromotionRes.ok ? await p6PromotionRes.json() : [];
+			const issuesData = issuesRes.ok ? await issuesRes.json() : [];
 			const eventsData = eventsRes.ok ? await eventsRes.json() : { data: [] };
 			const projectsData = projectsRes.ok ? await projectsRes.json() : { data: [] };
 			const sourcesData = sourcesRes.ok ? await sourcesRes.json() : { data: [] };
@@ -361,7 +380,9 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 				}));
 				setScorecards(normalizedScorecards);
 				setP7Data(Array.isArray(p7ResponseData) ? p7ResponseData : p7ResponseData.data || []);
-			setP7PrepResults(Array.isArray(p7PrepData) ? p7PrepData : p7PrepData.data || []);
+		setP7PrepResults(Array.isArray(p7PrepData) ? p7PrepData : p7PrepData.data || []);
+		setP7PleResults(Array.isArray(p7PleData) ? p7PleData : p7PleData.data || []);
+		setP6PromotionResults(Array.isArray(p6PromotionData) ? p6PromotionData : p6PromotionData.data || []);
 				setIssues(Array.isArray(issuesData) ? issuesData : issuesData.data || []);
 				setEvents(Array.isArray(eventsData) ? eventsData : eventsData.data || []);
 				setProjects(Array.isArray(projectsData) ? projectsData : (projectsData.data || []));
@@ -378,11 +399,25 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 				setError(err instanceof Error ? err.message : "Failed to load dashboard data");
 			} finally {
 				setLoading(false);
+				setIsRefreshing(false);
+				setHasFetchedOnce(true);
 			}
 		};
 
 		fetchData();
-	}, [selectedYear, selectedTerm]);
+	}, [selectedYear, selectedTerm, refreshTick]);
+
+	const handleRefresh = useCallback(() => {
+		setIsRefreshing(true);
+		setRefreshTick(prev => prev + 1);
+	}, []);
+
+	useEffect(() => {
+		const id = setInterval(() => {
+			handleRefresh();
+		}, 60000);
+		return () => clearInterval(id);
+	}, [handleRefresh]);
 
 	// Fetch chart trend data separately (not affected by year/term filters)
 	useEffect(() => {
@@ -511,6 +546,21 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 		return total;
 	}, [previousEnrollments, selectedYear, selectedTerm]);
 
+	const prepProgress = useMemo(() => {
+		const byPeriod = p7PrepResults.filter((r: any) => r.year === selectedYear && r.term === selectedTerm);
+		if (!byPeriod.length) return { value: 0, lastValue: 0, label: "", lastLabel: "" };
+		const prepNumbers = Array.from(new Set(byPeriod.map((r: any) => r.prepNumber))).sort((a, b) => b - a);
+		const calcPercent = (prepNum: number) => {
+			const rows = byPeriod.filter((r: any) => r.prepNumber === prepNum);
+			const div1 = rows.reduce((sum: number, r: any) => sum + (r.divisionI || 0), 0);
+			const enrollment = rows.reduce((sum: number, r: any) => sum + (r.enrollment || 0), 0);
+			return enrollment ? (div1 / enrollment) * 100 : 0;
+		};
+		const value = calcPercent(prepNumbers[0]);
+		const lastValue = prepNumbers[1] ? calcPercent(prepNumbers[1]) : 0;
+		return { value, lastValue, label: `Prep ${prepNumbers[0]}` , lastLabel: prepNumbers[1] ? `Prep ${prepNumbers[1]}` : "" };
+	}, [p7PrepResults, selectedYear, selectedTerm]);
+
 	const kpiMetrics = useMemo(() => {
 		const current = currentReport;
 		return [
@@ -552,8 +602,9 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 			{
 				label: "P7 Prep %",
 				sectionId: "p7-prep",
-				value: Math.round(current?.p7PrepExamsPercent ?? 0),
-				lastValue: Math.round(previousWeekReport?.p7PrepExamsPercent ?? 0),
+				value: Math.round(prepProgress.value ?? 0),
+				lastValue: Math.round(prepProgress.lastValue ?? 0),
+				lastLabel: prepProgress.lastLabel,
 				target: kpiTargets.p7PrepExamsPercent,
 			},
 			{
@@ -572,6 +623,12 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 			},
 		];
 	}, [currentReport, previousWeekReport, kpiTargets, currentTheologyEnrollment, previousTheologyEnrollment, currentEnrollment, previousEnrollment]);
+
+		const metricSourceLabels = useMemo(() => ({
+			"p7-prep": prepProgress.label ? `From ${prepProgress.label} Div I%` : "No prep data yet",
+			enrollment: `From enrollment entry · Y${selectedYear} T${selectedTerm}`,
+			"theology-enrollment": `From theology entry · Y${selectedYear} T${selectedTerm}`,
+		}), [prepProgress.label, selectedYear, selectedTerm]);
 
 	const filteredScorecards = useMemo(() => {
 		const byYear = scorecards.filter(sc => sc.year === selectedYear);
@@ -637,6 +694,24 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 		return d.toLocaleDateString();
 	};
 
+	const lastUpdatedLabel = useMemo(() => {
+		if (!lastUpdated) return "Not updated yet";
+		return lastUpdated.toLocaleString();
+	}, [lastUpdated]);
+
+	const lastUpdatedRelative = useMemo(() => {
+		if (!lastUpdated) return "Never updated";
+		const diffMs = Date.now() - lastUpdated.getTime();
+		if (diffMs < 30_000) return "Updated just now";
+		const minutes = Math.floor(diffMs / 60000);
+		if (minutes < 1) return "Updated <1m ago";
+		if (minutes < 60) return `Updated ${minutes}m ago`;
+		const hours = Math.floor(minutes / 60);
+		if (hours < 24) return `Updated ${hours}h ago`;
+		const days = Math.floor(hours / 24);
+		return `Updated ${days}d ago`;
+	}, [lastUpdated]);
+
 	const daysBetween = (a?: string, b?: string) => {
 		if (!a) return null;
 		const start = new Date(a);
@@ -657,6 +732,69 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 		);
 	}, [issues, selectedYear, selectedWeek, selectedTerm, viewMode]);
 
+	const issueAssignees = useMemo(() => {
+		const names = new Set<string>();
+		filteredIssues.forEach(issue => {
+			if (issue.inCharge) names.add(issue.inCharge);
+		});
+		return ["ALL", ...Array.from(names).sort((a, b) => a.localeCompare(b))];
+	}, [filteredIssues]);
+
+	const dedupedIssues = useMemo(() => {
+		const seen = new Set<string>();
+		return filteredIssues.filter(issue => {
+			const key = issue.id || `${issue.issue || issue.title || "unknown"}-${issue.createdAt || ""}-${issue.inCharge || ""}`;
+			if (seen.has(key)) return false;
+			seen.add(key);
+			return true;
+		});
+	}, [filteredIssues]);
+
+	const statusCounts = useMemo(() => {
+		return dedupedIssues.reduce(
+			(acc, issue) => {
+				const status = issue.status || "OPEN";
+				acc[status] = (acc[status] || 0) + 1;
+				return acc;
+			},
+			{ OPEN: 0, IN_PROGRESS: 0, RESOLVED: 0 } as Record<string, number>
+		);
+	}, [dedupedIssues]);
+
+	const filteredIssueList = useMemo(() => {
+		const statusOrder: Record<string, number> = { OPEN: 0, IN_PROGRESS: 1, RESOLVED: 2 };
+		const getAgeDays = (issue: RedIssue) => {
+			const days = daysBetween(issue.createdAt, issue.resolvedAt);
+			return days == null ? 0 : days;
+		};
+
+		let list = dedupedIssues;
+		if (issueStatusFilter !== "ALL") {
+			list = list.filter(issue => (issue.status || "OPEN") === issueStatusFilter);
+		}
+		if (issueAssigneeFilter !== "ALL") {
+			list = list.filter(issue => issue.inCharge === issueAssigneeFilter);
+		}
+
+		const sorted = [...list].sort((a, b) => {
+			const statusDiff = (statusOrder[a.status || "OPEN"] ?? 99) - (statusOrder[b.status || "OPEN"] ?? 99);
+			if (statusDiff !== 0) return statusDiff; // resolved sink to bottom
+			const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+			const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+			switch (issueSort) {
+				case "OLDEST":
+					return dateA - dateB;
+				case "LONGEST_OPEN":
+					return getAgeDays(b) - getAgeDays(a);
+				case "NEWEST":
+				default:
+					return dateB - dateA;
+			}
+		});
+
+		return sorted.slice(0, 12);
+	}, [dedupedIssues, issueAssigneeFilter, issueSort, issueStatusFilter]);
+
 	const filteredProjects = useMemo(() => {
 		let list = [...projects];
 		if (projectStatusFilter !== "ALL") {
@@ -673,17 +811,49 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 	}, [projects, projectStatusFilter]);
 
 	const tableEvents = useMemo(() => {
-		let filtered = [...events];
+		// Deduplicate events by id/activity/date/inCharge
+		const seen = new Set<string>();
+		const deduped = events.filter(evt => {
+			const key = `${evt.id || ""}-${evt.activity || ""}-${evt.date || ""}-${evt.inCharge || ""}`;
+			if (seen.has(key)) return false;
+			seen.add(key);
+			return true;
+		});
+
+		let filtered = [...deduped];
 		if (viewMode === "consolidated") {
 			filtered = filtered.filter(evt => (evt.year ?? selectedYear) === selectedYear);
 		} else {
 			filtered = filtered.filter(evt => (evt.year ?? selectedYear) === selectedYear && (evt.weekNumber ?? selectedWeek) === selectedWeek);
 		}
+		
+		// Apply status filter
 		if (eventStatusFilter !== "ALL") {
-			filtered = filtered.filter(evt => (evt.status ?? "ACTIVE") === eventStatusFilter);
+			filtered = filtered.filter(evt => {
+				const isCompleted = completedEventIds.has(evt.id);
+				const status = isCompleted ? "COMPLETED" : (evt.status ?? "ACTIVE");
+				return status === eventStatusFilter;
+			});
+		} else {
+			// Separate completed from active
+			const active = filtered.filter(evt => !completedEventIds.has(evt.id));
+			const completed = filtered.filter(evt => completedEventIds.has(evt.id));
+			filtered = [...active, ...completed];
 		}
-		return filtered.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-	}, [events, selectedYear, selectedWeek, viewMode, eventStatusFilter]);
+
+		// Apply priority filter
+		if (eventPriorityFilter !== "ALL") {
+			filtered = filtered.filter(evt => (evt.rate || evt.priority || "Low") === eventPriorityFilter);
+		}
+
+		// Sort by date (soonest first), then completed to bottom
+		return filtered.sort((a, b) => {
+			const aCompleted = completedEventIds.has(a.id);
+			const bCompleted = completedEventIds.has(b.id);
+			if (aCompleted !== bCompleted) return aCompleted ? 1 : -1;
+			return new Date(a.date).getTime() - new Date(b.date).getTime();
+		});
+	}, [events, selectedYear, selectedWeek, viewMode, eventStatusFilter, eventPriorityFilter, completedEventIds]);
 
 	const enrollmentTrends = useMemo(() => {
 		// Show enrollment from 2020 to current year
@@ -691,11 +861,18 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 		for (let year = 2020; year <= currentYear; year++) {
 			years.push(year);
 		}
+
+		const termFilter = enrollmentTermFilter === "ALL" ? null : enrollmentTermFilter;
 		
 		return years.map(year => {
 			// Get all enrollment records for this year with filters applied
 			let yearEnrollments = allEnrollments.filter(e => e.year === year);
 			let yearTheologyEnrollments = allTheologyEnrollments.filter(e => e.year === year);
+
+			if (termFilter !== null) {
+				yearEnrollments = yearEnrollments.filter(e => e.term === termFilter);
+				yearTheologyEnrollments = yearTheologyEnrollments.filter(e => e.term === termFilter);
+			}
 			
 			// Apply school filter
 			if (enrollmentSchoolFilter !== "ALL") {
@@ -708,67 +885,73 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 				yearEnrollments = yearEnrollments.filter(e => e.class === enrollmentClassFilter);
 				yearTheologyEnrollments = yearTheologyEnrollments.filter(e => e.class === enrollmentClassFilter);
 			}
-			
-			// Sum enrollment across ALL TERMS and ALL SCHOOLS for this year
-			const totalEnrollment = yearEnrollments.reduce((sum, e) => sum + (e.count || 0), 0);
-			const totalTheology = yearTheologyEnrollments.reduce((sum, e) => sum + (e.count || 0), 0);
+
+			const enrollmentTermTotals = new Map<number, number>();
+			const theologyTermTotals = new Map<number, number>();
+
+			yearEnrollments.forEach((e: any) => {
+				const term = e.term ?? 1;
+				enrollmentTermTotals.set(term, (enrollmentTermTotals.get(term) || 0) + (e.count || 0));
+			});
+			yearTheologyEnrollments.forEach((e: any) => {
+				const term = e.term ?? 1;
+				theologyTermTotals.set(term, (theologyTermTotals.get(term) || 0) + (e.count || 0));
+			});
+
+			const enrollmentTerms = Array.from(enrollmentTermTotals.keys());
+			const theologyTerms = Array.from(theologyTermTotals.keys());
+			const totalEnrollment = enrollmentTerms.reduce((sum, term) => sum + (enrollmentTermTotals.get(term) || 0), 0);
+			const totalTheology = theologyTerms.reduce((sum, term) => sum + (theologyTermTotals.get(term) || 0), 0);
+			const latestEnrollmentTerm = enrollmentTerms.length > 0 ? Math.max(...enrollmentTerms) : null;
+			const latestTheologyTerm = theologyTerms.length > 0 ? Math.max(...theologyTerms) : null;
+			const enrollmentLatest = latestEnrollmentTerm !== null ? (enrollmentTermTotals.get(latestEnrollmentTerm) || 0) : 0;
+			const theologyLatest = latestTheologyTerm !== null ? (theologyTermTotals.get(latestTheologyTerm) || 0) : 0;
 			
 			// If no data for this year, check WeeklyReport as fallback
 			if (totalEnrollment === 0) {
-				const yearReports = reports.filter(r => r.year === year);
+				const yearReports = reports.filter(r => r.year === year && (termFilter === null || (r.term ?? 1) === termFilter));
 				
 				if (yearReports.length === 0) {
 					return {
 						year: year.toString(),
-						enrollment: 0,
-						theology: 0,
+						enrollmentLatest: 0,
+						theologyLatest: 0,
 						isFuture: year > currentYear,
 					};
 				}
 				
-				// For years >= 2026, show latest value from reports
-				// For past years, show average enrollment from reports
-				if (year >= 2026) {
-					const sortedReports = yearReports.sort((a, b) => {
-						const termDiff = (b.term ?? 1) - (a.term ?? 1);
-						if (termDiff !== 0) return termDiff;
-						return b.weekNumber - a.weekNumber;
-					});
-					const latestReport = sortedReports[0];
-					return {
-						year: year.toString(),
-						enrollment: latestReport.totalEnrollment,
-						theology: latestReport.theologyEnrollment,
-						isFuture: false,
-					};
-				} else {
-					// For past years (2020-2025), calculate average from reports
-					const totalEnrollmentReports = yearReports.reduce((sum, r) => sum + r.totalEnrollment, 0);
-					const totalTheologyReports = yearReports.reduce((sum, r) => sum + r.theologyEnrollment, 0);
-					return {
-						year: year.toString(),
-						enrollment: Math.round(totalEnrollmentReports / yearReports.length),
-						theology: Math.round(totalTheologyReports / yearReports.length),
-						isFuture: false,
-					};
-				}
+				const sortedReports = yearReports.sort((a, b) => {
+					const termDiff = (b.term ?? 1) - (a.term ?? 1);
+					if (termDiff !== 0) return termDiff;
+					return b.weekNumber - a.weekNumber;
+				});
+				const latestReport = sortedReports[0];
+				return {
+					year: year.toString(),
+					enrollmentLatest: latestReport.totalEnrollment,
+					theologyLatest: latestReport.theologyEnrollment,
+					isFuture: false,
+				};
 			}
 			
 			// Use data from Enrollment and TheologyEnrollment tables
 			return {
 				year: year.toString(),
-				enrollment: totalEnrollment,
-				theology: totalTheology,
+				enrollmentLatest,
+				theologyLatest,
 				isFuture: false,
 			};
 		});
-	}, [reports, allEnrollments, allTheologyEnrollments, currentYear, enrollmentSchoolFilter, enrollmentClassFilter]);
+	}, [reports, allEnrollments, allTheologyEnrollments, currentYear, enrollmentSchoolFilter, enrollmentClassFilter, enrollmentTermFilter]);
 
 	const p7ChartData = useMemo(() => {
-		// Use new P7 prep results data if available, otherwise fall back to old data
-		if (p7PrepResults && p7PrepResults.length > 0) {
+		// Use new P7 prep + PLE + P6 promotion results data if available, otherwise fall back to old data
+		const hasNewData = (p7PrepResults?.length ?? 0) > 0 || (p7PleResults?.length ?? 0) > 0 || (p6PromotionResults?.length ?? 0) > 0;
+		if (hasNewData) {
 			const yearPrepMap = new Map<number, Map<number, { enrollment: number; divisionI: number }>>();
-			
+			const pleYearMap = new Map<number, { popn: number; divisionI: number }>();
+			const promotionYearMap = new Map<number, { actualPopn: number; divisionI: number }>();
+
 			p7PrepResults.forEach((result: any) => {
 				if (!yearPrepMap.has(result.year)) {
 					yearPrepMap.set(result.year, new Map());
@@ -781,50 +964,80 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 				prepMap.set(key, existing);
 			});
 
-			const sorted = Array.from(yearPrepMap.entries())
-				.sort((a, b) => a[0] - b[0])
-				.map(([year, prepMap]) => {
-					const data: any = { year };
-					for (let prep = 1; prep <= 9; prep++) {
-						const prepData = prepMap.get(prep);
-						// Show Division 1 percentage for that prep
-						if (prepData && prepData.enrollment > 0) {
-							data[`Prep ${prep}`] = Math.round((prepData.divisionI / prepData.enrollment) * 1000) / 10;
-						} else {
-							data[`Prep ${prep}`] = 0;
-						}
-					}
-					return data;
-				});
+			p7PleResults.forEach((result: any) => {
+				const current = pleYearMap.get(result.year) || { popn: 0, divisionI: 0 };
+				current.popn += result.popn || 0;
+				current.divisionI += result.divisionI || 0;
+				pleYearMap.set(result.year, current);
+			});
 
-			// Apply year window filter
+			p6PromotionResults.forEach((result: any) => {
+				if (![4, 5, 6].includes(result.setNumber)) return;
+				const actual = result.actualPopn || Math.max((result.popn || 0) - (result.absences || 0), 0);
+				const current = promotionYearMap.get(result.year) || { actualPopn: 0, divisionI: 0 };
+				current.actualPopn += actual;
+				current.divisionI += result.divisionI || 0;
+				promotionYearMap.set(result.year, current);
+			});
+
+			const yearSet = new Set<number>();
+			yearPrepMap.forEach((_, year) => yearSet.add(year));
+			pleYearMap.forEach((_, year) => yearSet.add(year));
+			promotionYearMap.forEach((_, year) => yearSet.add(year));
+			const orderedYears = Array.from(yearSet).sort((a, b) => a - b);
+
+			const rows = orderedYears.map((year) => {
+				const data: any = { year, Promotion: 0 };
+				const prepMap = yearPrepMap.get(year) ?? new Map();
+				for (let prep = 1; prep <= 9; prep++) {
+					const prepData = prepMap.get(prep);
+					if (prepData && prepData.enrollment > 0) {
+						data[`Prep ${prep}`] = Math.round((prepData.divisionI / prepData.enrollment) * 1000) / 10;
+					} else {
+						data[`Prep ${prep}`] = 0;
+					}
+				}
+
+				const promotionData = promotionYearMap.get(year);
+				if (promotionData && promotionData.actualPopn > 0) {
+					data.Promotion = Math.round((promotionData.divisionI / promotionData.actualPopn) * 1000) / 10;
+				}
+
+				const pleData = pleYearMap.get(year);
+				if (pleData && pleData.popn > 0) {
+					data.PLE = Math.round((pleData.divisionI / pleData.popn) * 1000) / 10;
+				} else {
+					data.PLE = 0;
+				}
+
+				return data;
+			});
+
 			if (p7YearsWindow === 999) {
-				return sorted; // All years
-			} else {
-				const years = Array.from(yearPrepMap.keys()).sort((a, b) => a - b);
-				const windowYears = years.slice(Math.max(0, years.length - p7YearsWindow));
-				return sorted.filter(d => windowYears.includes(d.year));
+				return rows; // All years
 			}
+
+			const windowYears = orderedYears.slice(Math.max(0, orderedYears.length - p7YearsWindow));
+			return rows.filter((d) => windowYears.includes(d.year));
 		}
 
 		// Fall back to old data - show all years
 		const sorted = [...p7Data].sort((a, b) => a.year - b.year);
-		return sorted
-			.map(d => ({
-				year: d.year,
-				Promotion: d.p6Promotion,
-				"Prep 1": d.prep1,
-				"Prep 2": d.prep2,
-				"Prep 3": d.prep3,
-				"Prep 4": d.prep4,
-				"Prep 5": d.prep5,
-				"Prep 6": d.prep6,
-				"Prep 7": d.prep7,
-				"Prep 8": d.prep8,
-				"Prep 9": d.prep9,
-				PLE: d.ple,
-			}));
-	}, [p7Data, p7PrepResults, p7YearsWindow]);
+		return sorted.map((d) => ({
+			year: d.year,
+			Promotion: d.p6Promotion,
+			"Prep 1": d.prep1,
+			"Prep 2": d.prep2,
+			"Prep 3": d.prep3,
+			"Prep 4": d.prep4,
+			"Prep 5": d.prep5,
+			"Prep 6": d.prep6,
+			"Prep 7": d.prep7,
+			"Prep 8": d.prep8,
+			"Prep 9": d.prep9,
+			PLE: d.ple,
+		}));
+	}, [p7Data, p7PrepResults, p7PleResults, p6PromotionResults, p7YearsWindow]);
 
 	const p7TableData = useMemo(() => {
 		// Use the same chart data to ensure consistency
@@ -859,39 +1072,158 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 			filteredIncomes = filteredIncomes.filter(inc => inc.year === incomeYearFilter);
 		}
 		
+		if (incomeTermFilter !== "ALL") {
+			filteredIncomes = filteredIncomes.filter(inc => (inc as any).term === incomeTermFilter);
+		}
+		
 		if (incomeSourceFilter !== "ALL") {
 			filteredIncomes = filteredIncomes.filter(inc => inc.source === incomeSourceFilter);
 		}
 		
-		const grouped = new Map<string, Map<number, { amount: number; percentage: number }>>();
-		filteredIncomes.forEach(inc => {
-			if (!grouped.has(inc.source)) {
-				grouped.set(inc.source, new Map());
-			}
-			const yearMap = grouped.get(inc.source)!;
-			const existing = yearMap.get(inc.year) || { amount: 0, percentage: 0 };
-			existing.amount += inc.amount || 0;
-			existing.percentage += inc.percentage || 0;
-			yearMap.set(inc.year, existing);
-		});
-
-		const allYears = new Set<number>();
-		filteredIncomes.forEach(inc => allYears.add(inc.year));
-		const years = Array.from(allYears).sort((a, b) => a - b);
-
-		return Array.from(grouped.entries()).map(([source, yearMap]) => {
-			const item: Record<string, number | string> = { name: source };
-			years.forEach(year => {
-				const data = yearMap.get(year);
-				if (incomeDisplayMode === "amount") {
-					item[`year_${year}`] = data?.amount || 0;
-				} else {
-					item[`year_${year}`] = data?.percentage || 0;
+		// If showing all terms, group by year+term; otherwise group by year only
+		if (incomeTermFilter === "ALL") {
+			const grouped = new Map<string, Map<string, { amount: number; percentage: number }>>();
+			filteredIncomes.forEach(inc => {
+				if (!grouped.has(inc.source)) {
+					grouped.set(inc.source, new Map());
 				}
+				const periodMap = grouped.get(inc.source)!;
+				const term = (inc as any).term || 1;
+				const periodKey = `${inc.year}_T${term}`;
+				const existing = periodMap.get(periodKey) || { amount: 0, percentage: 0 };
+				existing.amount += inc.amount || 0;
+				existing.percentage += inc.percentage || 0;
+				periodMap.set(periodKey, existing);
 			});
+
+			const allPeriods = new Set<string>();
+			filteredIncomes.forEach(inc => {
+				const term = (inc as any).term || 1;
+				allPeriods.add(`${inc.year}_T${term}`);
+			});
+			const periods = Array.from(allPeriods).sort();
+
+			return Array.from(grouped.entries()).map(([source, periodMap]) => {
+				const item: Record<string, number | string> = { name: source };
+				periods.forEach(period => {
+					const data = periodMap.get(period);
+					if (incomeDisplayMode === "amount") {
+						item[period] = data?.amount || 0;
+					} else {
+						item[period] = data?.percentage || 0;
+					}
+				});
 				return item;
+			});
+		} else {
+			// Original logic: group by year only when a specific term is selected
+			const grouped = new Map<string, Map<number, { amount: number; percentage: number }>>();
+			filteredIncomes.forEach(inc => {
+				if (!grouped.has(inc.source)) {
+					grouped.set(inc.source, new Map());
+				}
+				const yearMap = grouped.get(inc.source)!;
+				const existing = yearMap.get(inc.year) || { amount: 0, percentage: 0 };
+				existing.amount += inc.amount || 0;
+				existing.percentage += inc.percentage || 0;
+				yearMap.set(inc.year, existing);
+			});
+
+			const allYears = new Set<number>();
+			filteredIncomes.forEach(inc => allYears.add(inc.year));
+			const years = Array.from(allYears).sort((a, b) => a - b);
+
+			return Array.from(grouped.entries()).map(([source, yearMap]) => {
+				const item: Record<string, number | string> = { name: source };
+				years.forEach(year => {
+					const data = yearMap.get(year);
+					if (incomeDisplayMode === "amount") {
+						item[`year_${year}`] = data?.amount || 0;
+					} else {
+						item[`year_${year}`] = data?.percentage || 0;
+					}
+				});
+				return item;
+			});
+		}
+	}, [incomes, incomeYearFilter, incomeTermFilter, incomeSourceFilter, incomeDisplayMode]);
+
+	const incomeTermAverages = useMemo(() => {
+		// Apply filters
+		let filteredIncomes = incomes;
+		
+		if (incomeYearFilter !== "ALL") {
+			filteredIncomes = filteredIncomes.filter(inc => inc.year === incomeYearFilter);
+		}
+		
+		if (incomeSourceFilter !== "ALL") {
+			filteredIncomes = filteredIncomes.filter(inc => inc.source === incomeSourceFilter);
+		}
+		
+		// Group by term
+		const termGroups = new Map<number, { amounts: number[]; percentages: number[] }>();
+		filteredIncomes.forEach(inc => {
+			const term = (inc as any).term || 1;
+			if (!termGroups.has(term)) {
+				termGroups.set(term, { amounts: [], percentages: [] });
+			}
+			const group = termGroups.get(term)!;
+			group.amounts.push(inc.amount || 0);
+			group.percentages.push(inc.percentage || 0);
 		});
-	}, [incomes, incomeYearFilter, incomeSourceFilter, incomeDisplayMode]);
+
+		return Array.from(termGroups.entries())
+			.map(([term, data]) => ({
+				name: `Term ${term}`,
+				avgAmount: data.amounts.length > 0 
+					? data.amounts.reduce((sum, val) => sum + val, 0) / data.amounts.length 
+					: 0,
+				avgPercentage: data.percentages.length > 0 
+					? data.percentages.reduce((sum, val) => sum + val, 0) / data.percentages.length 
+					: 0,
+				count: data.amounts.length
+			}))
+			.sort((a, b) => parseInt(a.name.split(' ')[1]) - parseInt(b.name.split(' ')[1]));
+	}, [incomes, incomeYearFilter, incomeSourceFilter]);
+
+	const incomeTotalChartData = useMemo(() => {
+		// Apply filters
+		let filteredIncomes = incomes;
+		
+		if (incomeYearFilter !== "ALL") {
+			filteredIncomes = filteredIncomes.filter(inc => inc.year === incomeYearFilter);
+		}
+		
+		if (incomeTermFilter !== "ALL") {
+			filteredIncomes = filteredIncomes.filter(inc => (inc as any).term === incomeTermFilter);
+		}
+		
+		if (incomeSourceFilter !== "ALL") {
+			filteredIncomes = filteredIncomes.filter(inc => inc.source === incomeSourceFilter);
+		}
+		
+		// Group by source and aggregate all amounts/percentages
+		const sourceGroups = new Map<string, { totalAmount: number; totalPercentage: number; count: number }>();
+		filteredIncomes.forEach(inc => {
+			if (!sourceGroups.has(inc.source)) {
+				sourceGroups.set(inc.source, { totalAmount: 0, totalPercentage: 0, count: 0 });
+			}
+			const group = sourceGroups.get(inc.source)!;
+			group.totalAmount += inc.amount || 0;
+			group.totalPercentage += inc.percentage || 0;
+			group.count += 1;
+		});
+
+		return Array.from(sourceGroups.entries())
+			.map(([source, data]) => ({
+				name: source,
+				value: incomeDisplayMode === "amount" ? data.totalAmount : data.totalPercentage,
+				totalAmount: data.totalAmount,
+				totalPercentage: data.totalPercentage,
+				count: data.count
+			}))
+			.sort((a, b) => b.value - a.value);
+	}, [incomes, incomeYearFilter, incomeTermFilter, incomeSourceFilter, incomeDisplayMode]);
 
 	const schoolRankings = useMemo(() => {
 		const schoolScores = new Map<string, { name: string; scores: number[] }>();
@@ -976,6 +1308,64 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 		[currentReportId, session?.user?.id]
 	);
 
+	const handleUpdateIssueStatus = useCallback(
+		async (issueId: string, newStatus: string) => {
+			try {
+				setUpdatingIssueId(issueId);
+				const response = await fetch(`/api/issues/${issueId}`, {
+					method: "PATCH",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ status: newStatus }),
+				});
+				if (!response.ok) throw new Error("Failed to update issue status");
+				
+				const updated = await response.json();
+				
+				// Update the issue in the local state
+				setIssues(prev => prev.map(issue => issue.id === issueId ? { ...issue, ...updated } : issue));
+				
+				// Refresh timestamp
+				setLastUpdated(new Date());
+			} catch (err) {
+				alert(err instanceof Error ? err.message : "Failed to update issue status");
+			} finally {
+				setUpdatingIssueId(null);
+			}
+		},
+		[]
+	);
+
+	const handleToggleEventCompletion = useCallback((eventId: string) => {
+		setCompletedEventIds(prev => {
+			const next = new Set(prev);
+			if (next.has(eventId)) {
+				next.delete(eventId);
+			} else {
+				next.add(eventId);
+			}
+			return next;
+		});
+	}, []);
+
+	const eventPriorities = useMemo(() => {
+		const priorities = new Set<string>();
+		tableEvents.forEach(evt => {
+			const priority = evt.rate || evt.priority || "Low";
+			priorities.add(priority);
+		});
+		return ["ALL", ...Array.from(priorities).sort()];
+	}, [tableEvents]);
+
+	const getUrgencyColor = (daysUntil: number, isCompleted: boolean): string => {
+		if (isCompleted) return "bg-gray-100 text-gray-400";
+		if (daysUntil < 0) return "bg-red-100 text-red-700";
+		if (daysUntil === 0) return "bg-amber-100 text-amber-700";
+		if (daysUntil <= 7) return "bg-orange-100 text-orange-700";
+		if (daysUntil <= 14) return "bg-yellow-100 text-yellow-700";
+		if (daysUntil <= 30) return "bg-blue-100 text-blue-700";
+		return "bg-gray-100 text-gray-600";
+	};
+
 	const handleSaveEnrollment = useCallback(async () => {
 		if (!enrollmentForm.totalEnrollment || enrollmentForm.totalEnrollment <= 0) {
 			alert("Please enter a valid total enrollment");
@@ -1049,11 +1439,11 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 			// Sheet 2: Enrollment Trends (Yearly)
 			const trendsData = enrollmentTrends.map(item => ({
 				"Year": item.year,
-				"Total Enrollment": item.enrollment,
-				"Theology Enrollment": item.theology,
+				"Enrollment (Latest Term)": item.enrollmentLatest,
+				"Theology (Latest Term)": item.theologyLatest,
 			}));
 			const trendsSheet = XLSX.utils.json_to_sheet(trendsData);
-			trendsSheet['!cols'] = [{ wch: 15 }, { wch: 18 }, { wch: 18 }];
+			trendsSheet['!cols'] = [{ wch: 15 }, { wch: 22 }, { wch: 22 }];
 			XLSX.utils.book_append_sheet(wb, trendsSheet, "Enrollment Trends");
 
 			// Sheet 3: School Rankings
@@ -1119,7 +1509,7 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 		}
 	}, [kpiMetrics, enrollmentTrends, schoolRankings, p7ChartData, tableEvents, filteredProjects, selectedYear, selectedTerm, formatDate]);
 
-	if (status === "loading" || loading) {
+	if (status === "loading" || (!hasFetchedOnce && loading)) {
 		return (
 			<DashboardLayout 
 				selectedYear={selectedYear}
@@ -1155,6 +1545,14 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 				<div className="mb-6 md:hidden">
 					<PushNotificationSetup />
 				</div>
+
+				{isRefreshing && (
+					<div className="mb-4">
+						<div className="h-1 w-full overflow-hidden rounded-full bg-blue-100">
+							<div className="h-full w-1/3 bg-blue-500 animate-pulse"></div>
+						</div>
+					</div>
+				)}
 
 				<div className="mb-8">
 					<h1 className="text-3xl font-bold text-gray-900">Weekly Report Dashboard</h1>
@@ -1198,7 +1596,11 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 						)}
 					</div>
 
-					<div className="flex gap-4 items-center mt-4">
+					<div className="flex flex-col sm:items-end gap-2 mt-4">
+						<div className="flex flex-wrap gap-3 items-center justify-end">
+							<span className="px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-200">
+								{isRefreshing ? "Refreshing..." : lastUpdatedRelative}
+							</span>
 							<button
 								onClick={exportToExcel}
 								className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
@@ -1222,6 +1624,11 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 								onUpdate={(newTargets) => setKpiTargets((prev) => ({ ...prev, ...newTargets }))}
 							/>
 						</div>
+						<div className="flex items-center gap-2 text-sm text-gray-500">
+							<ClockIcon className="w-4 h-4" />
+							<span>{lastUpdatedLabel}</span>
+						</div>
+					</div>
 					</div>
 				</div>
 
@@ -1267,25 +1674,22 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 								key={idx}
 								className={`bg-white p-6 rounded-xl shadow-sm border transition-all hover:shadow-md hover:-translate-y-0.5 ${
 									targetMet ? "border-green-300 bg-gradient-to-b from-green-50/60 to-white" : "border-gray-100"
-								} ${isTheology ? "cursor-pointer" : ""}`}
-								onClick={isTheology ? () => router.push("/theology-analysis") : undefined}
+								}`}
 							>
 								<div className="flex items-start justify-between mb-4">
 									<div className="flex items-center gap-2">
 										<span className="px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-200">
 											{metric.label}
 										</span>
-										{isTheology && (
-											<span className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-blue-700 bg-blue-100 rounded-full border border-blue-200">
-												Click for details
-											</span>
-										)}
 										{targetMet && (
 											<span className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-green-700 bg-green-100 rounded-full border border-green-200">
 												<CheckCircleIcon className="w-4 h-4" /> Target met
 											</span>
 										)}
 									</div>
+									{metricSourceLabels[metric.sectionId] && (
+										<p className="text-[11px] text-gray-500 mt-1">{metricSourceLabels[metric.sectionId]}</p>
+									)}
 									<div
 										className={`flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-semibold border ${
 											isNeutral
@@ -1352,7 +1756,15 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 								)}
 
 								<div className="flex items-center justify-between text-xs text-gray-600 mb-4">
-									{isTheology || isEnrollment ? (
+									{metric.sectionId === "p7-prep" ? (
+										metric.lastValue > 0 ? (
+											<span>
+												{metric.lastLabel || "Previous prep"}: <span className="font-semibold text-gray-800">{metric.lastValue}%</span>
+											</span>
+										) : (
+											<span className="italic">No previous prep data</span>
+										)
+									) : isTheology || isEnrollment ? (
 										// Theology and Enrollment use previous TERM, not previous week
 										metric.lastValue > 0 ? (
 											<span>
@@ -1687,7 +2099,7 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 					<div className="flex items-center justify-between">
 						<div>
 							<h3 className="text-lg font-semibold text-gray-900">Enrollment Trends (2020 - {currentYear})</h3>
-							<p className="text-xs text-gray-500 mt-1">Showing average enrollment for past years (2020-2025) and latest enrollment from 2026 onwards (updates as data is entered).</p>
+							<p className="text-xs text-gray-500 mt-1">Shows latest-term enrollment totals across all schools and classes (filters apply).</p>
 						</div>
 						{userRole === "GM" && (
 							<button
@@ -1713,6 +2125,22 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 							</select>
 						</div>
 						<div className="flex items-center gap-2">
+							<span className="text-xs text-gray-600 font-medium">Filter by Term:</span>
+							<select
+								value={enrollmentTermFilter}
+								onChange={(e) => {
+									const value = e.target.value;
+									setEnrollmentTermFilter(value === "ALL" ? "ALL" : Number(value));
+								}}
+								className="px-3 py-1.5 text-xs font-medium text-gray-900 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
+							>
+								<option value="ALL">All Terms</option>
+								<option value={1}>Term 1</option>
+								<option value={2}>Term 2</option>
+								<option value={3}>Term 3</option>
+							</select>
+						</div>
+						<div className="flex items-center gap-2">
 							<span className="text-xs text-gray-600 font-medium">Filter by Class:</span>
 							<select
 								value={enrollmentClassFilter}
@@ -1732,11 +2160,12 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 								<option value="P.7">P.7</option>
 							</select>
 						</div>
-						{(enrollmentSchoolFilter !== "ALL" || enrollmentClassFilter !== "ALL") && (
+						{(enrollmentSchoolFilter !== "ALL" || enrollmentClassFilter !== "ALL" || enrollmentTermFilter !== "ALL") && (
 							<button
 								onClick={() => {
 									setEnrollmentSchoolFilter("ALL");
 									setEnrollmentClassFilter("ALL");
+									setEnrollmentTermFilter("ALL");
 								}}
 								className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
 							>
@@ -1802,8 +2231,8 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 							<YAxis label={{ value: 'Enrollment', angle: -90, position: 'insideLeft' }} />
 							<Tooltip />
 							<Legend />
-							<Line type="monotone" dataKey="enrollment" stroke="#3b82f6" strokeWidth={2} name="Total Enrollment" />
-							<Line type="monotone" dataKey="theology" stroke="#8b5cf6" strokeWidth={2} name="Theology Enrollment" />
+							<Line type="monotone" dataKey="enrollmentLatest" stroke="#2563eb" strokeWidth={2} name="Enrollment (Latest Term)" />
+							<Line type="monotone" dataKey="theologyLatest" stroke="#7c3aed" strokeWidth={2} name="Theology (Latest Term)" />
 						</LineChart>
 					</ResponsiveContainer>
 				</div>
@@ -1969,6 +2398,19 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 							</select>
 						</div>
 						<div className="flex items-center gap-2">
+							<span className="text-xs text-gray-600 font-medium">Term:</span>
+							<select
+								value={incomeTermFilter}
+								onChange={(e) => setIncomeTermFilter(e.target.value === "ALL" ? "ALL" : Number(e.target.value))}
+								className="px-3 py-1.5 text-xs font-medium text-gray-900 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
+							>
+								<option value="ALL">All Terms</option>
+								<option value={1}>Term 1</option>
+								<option value={2}>Term 2</option>
+								<option value={3}>Term 3</option>
+							</select>
+						</div>
+						<div className="flex items-center gap-2">
 							<span className="text-xs text-gray-600 font-medium">Source:</span>
 							<select
 								value={incomeSourceFilter}
@@ -2004,10 +2446,34 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 								Percentages
 							</button>
 						</div>
-						{(incomeYearFilter !== "ALL" || incomeSourceFilter !== "ALL") && (
+						<div className="flex items-center gap-2 border-l border-gray-300 pl-4">
+							<span className="text-xs text-gray-600 font-medium">View:</span>
+							<button
+								onClick={() => setIncomeChartView("by-year")}
+								className={`px-3 py-1.5 text-xs font-medium rounded-lg ${
+									incomeChartView === "by-year" 
+										? "bg-purple-600 text-white" 
+										: "bg-gray-100 text-gray-700 hover:bg-gray-200"
+								}`}
+							>
+								By Year
+							</button>
+							<button
+								onClick={() => setIncomeChartView("total")}
+								className={`px-3 py-1.5 text-xs font-medium rounded-lg ${
+									incomeChartView === "total" 
+										? "bg-purple-600 text-white" 
+										: "bg-gray-100 text-gray-700 hover:bg-gray-200"
+								}`}
+							>
+								Total Summary
+							</button>
+						</div>
+						{(incomeYearFilter !== "ALL" || incomeTermFilter !== "ALL" || incomeSourceFilter !== "ALL") && (
 							<button
 								onClick={() => {
 									setIncomeYearFilter("ALL");
+									setIncomeTermFilter("ALL");
 									setIncomeSourceFilter("ALL");
 								}}
 								className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
@@ -2017,61 +2483,207 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 						)}
 					</div>
 				</div>
-				{incomeChartData.length > 0 ? (
+				{(incomeChartView === "by-year" ? incomeChartData.length > 0 : incomeTotalChartData.length > 0) ? (
 					<div>
-						<ResponsiveContainer width="100%" height={400}>
-							<BarChart data={incomeChartData}>
-								<CartesianGrid strokeDasharray="3 3" />
-								<XAxis dataKey="name" />
-								<YAxis label={{ value: incomeDisplayMode === "amount" ? "Amount" : "Percentage (%)", angle: -90, position: "insideLeft" }} />
-								<Tooltip formatter={(value) => incomeDisplayMode === "amount" ? `${Number(value).toLocaleString()}` : `${Number(value).toFixed(1)}%`} />
-								<Legend />
-								{Array.from(new Set(incomes.map(inc => inc.year)))
-									.sort((a, b) => a - b)
-									.filter(year => incomeYearFilter === "ALL" || year === incomeYearFilter)
-									.map((year, index) => (
-										<Bar key={year} dataKey={`year_${year}`} fill={COLORS[index % COLORS.length]} name={`Year ${year}`} />
-									))}
-							</BarChart>
-						</ResponsiveContainer>
+						{incomeChartView === "by-year" ? (
+							<ResponsiveContainer width="100%" height={400}>
+								<BarChart data={incomeChartData}>
+									<CartesianGrid strokeDasharray="3 3" />
+									<XAxis dataKey="name" />
+									<YAxis label={{ value: incomeDisplayMode === "amount" ? "Amount" : "Percentage (%)", angle: -90, position: "insideLeft" }} />
+									<Tooltip formatter={(value) => incomeDisplayMode === "amount" ? `${Number(value).toLocaleString()}` : `${Number(value).toFixed(1)}%`} />
+									<Legend />
+									{incomeTermFilter === "ALL" ? (
+										(() => {
+											// Get all period keys from the data
+											const periodKeys = new Set<string>();
+											incomeChartData.forEach(item => {
+												Object.keys(item).forEach(key => {
+													if (key !== "name" && key.includes("_T")) {
+														periodKeys.add(key);
+													}
+												});
+											});
+											return Array.from(periodKeys).sort().map((periodKey, index) => {
+												const [year, term] = periodKey.split("_");
+												return (
+													<Bar 
+														key={periodKey} 
+														dataKey={periodKey} 
+														fill={COLORS[index % COLORS.length]} 
+														name={`${year} ${term}`} 
+													/>
+												);
+											});
+										})()
+									) : (
+										Array.from(new Set(incomes.map(inc => inc.year)))
+											.sort((a, b) => a - b)
+											.filter(year => incomeYearFilter === "ALL" || year === incomeYearFilter)
+											.map((year, index) => (
+												<Bar key={year} dataKey={`year_${year}`} fill={COLORS[index % COLORS.length]} name={`Year ${year}`} />
+											))
+									)}
+								</BarChart>
+							</ResponsiveContainer>
+						) : (
+							<ResponsiveContainer width="100%" height={400}>
+								<BarChart data={incomeTotalChartData}>
+									<CartesianGrid strokeDasharray="3 3" />
+									<XAxis dataKey="name" />
+									<YAxis label={{ value: incomeDisplayMode === "amount" ? "Total Amount" : "Total Percentage", angle: -90, position: "insideLeft" }} />
+									<Tooltip 
+										content={({ active, payload }) => {
+											if (active && payload && payload.length) {
+												const data = payload[0].payload;
+												return (
+													<div className="bg-white p-3 border border-gray-300 rounded-lg shadow-lg">
+														<p className="font-semibold text-gray-900">{data.name}</p>
+														<p className="text-sm text-blue-600">
+															Total Amount: {data.totalAmount.toLocaleString()} UGX
+														</p>
+														<p className="text-sm text-green-600">
+															Total %: {data.totalPercentage.toFixed(1)}%
+														</p>
+														<p className="text-xs text-gray-500 mt-1">
+															{data.count} {data.count === 1 ? 'entry' : 'entries'}
+														</p>
+													</div>
+												);
+											}
+											return null;
+										}}
+									/>
+									<Legend />
+									<Bar dataKey="value" fill="#8b5cf6" name={incomeDisplayMode === "amount" ? "Total Amount" : "Total Percentage"} />
+								</BarChart>
+							</ResponsiveContainer>
+						)}
 						<div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
-							{incomeChartData.map((item, idx) => {
-								const years = Object.keys(item).filter(k => k.startsWith("year_"));
-								const totalAmount = years.reduce((sum, k) => sum + Number(item[k]), 0);
-								
-								// Get percentage values
-								const sourceIncomes = incomes.filter(inc => 
-									inc.source === item.name && 
-									(incomeYearFilter === "ALL" || inc.year === incomeYearFilter)
-								);
-								const totalPercentage = sourceIncomes.reduce((sum, inc) => sum + inc.percentage, 0);
-								
-								return (
-									<div key={idx} className="p-3 bg-gray-50 rounded-lg">
-										<p className="text-xs font-medium text-gray-700">{item.name as string}</p>
+							{incomeChartView === "by-year" ? (
+								incomeChartData.map((item, idx) => {
+									const dataKeys = Object.keys(item).filter(k => k !== "name");
+									const totalAmount = dataKeys.reduce((sum, k) => sum + Number(item[k]), 0);
+									
+									// Get percentage values
+									const sourceIncomes = incomes.filter(inc => 
+										inc.source === item.name && 
+										(incomeYearFilter === "ALL" || inc.year === incomeYearFilter) &&
+										(incomeTermFilter === "ALL" || (inc as any).term === incomeTermFilter)
+									);
+									const totalPercentage = sourceIncomes.reduce((sum, inc) => sum + inc.percentage, 0);
+									
+									return (
+										<div key={idx} className="p-3 bg-gray-50 rounded-lg">
+											<p className="text-xs font-medium text-gray-700">{item.name as string}</p>
+											{incomeDisplayMode === "amount" ? (
+												<>
+													<p className="text-sm font-semibold text-gray-900">
+														{totalAmount.toLocaleString()}
+													</p>
+													<p className="text-[10px] text-gray-500 mt-0.5">
+														{totalPercentage.toFixed(1)}%
+													</p>
+												</>
+											) : (
+												<>
+													<p className="text-sm font-semibold text-gray-900">
+														{totalPercentage.toFixed(1)}%
+													</p>
+													<p className="text-[10px] text-gray-500 mt-0.5">
+														{totalAmount.toLocaleString()}
+													</p>
+												</>
+											)}
+										</div>
+									);
+								})
+							) : (
+								incomeTotalChartData.map((item, idx) => (
+									<div key={idx} className="p-3 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg border border-purple-200">
+										<p className="text-xs font-medium text-purple-900">{item.name}</p>
 										{incomeDisplayMode === "amount" ? (
 											<>
-												<p className="text-sm font-semibold text-gray-900">
-													{totalAmount.toLocaleString()}
+												<p className="text-sm font-semibold text-purple-900">
+													{item.totalAmount.toLocaleString()} UGX
 												</p>
-												<p className="text-[10px] text-gray-500 mt-0.5">
-													{totalPercentage.toFixed(1)}%
+												<p className="text-[10px] text-purple-700 mt-0.5">
+													{item.totalPercentage.toFixed(1)}%
 												</p>
 											</>
 										) : (
 											<>
-												<p className="text-sm font-semibold text-gray-900">
-													{totalPercentage.toFixed(1)}%
+												<p className="text-sm font-semibold text-purple-900">
+													{item.totalPercentage.toFixed(1)}%
 												</p>
-												<p className="text-[10px] text-gray-500 mt-0.5">
-													{totalAmount.toLocaleString()}
+												<p className="text-[10px] text-purple-700 mt-0.5">
+													{item.totalAmount.toLocaleString()} UGX
 												</p>
 											</>
 										)}
+										<p className="text-[10px] text-purple-600 mt-1">
+											{item.count} {item.count === 1 ? 'entry' : 'entries'}
+										</p>
 									</div>
-								);
-							})}
+								))
+							)}
 						</div>
+
+						{/* Term Averages Chart */}
+						{incomeTermAverages.length > 0 && (
+							<div className="mt-8 pt-8 border-t border-gray-200">
+								<h4 className="text-md font-semibold text-gray-900 mb-4">Average by Term/Period</h4>
+								<ResponsiveContainer width="100%" height={300}>
+									<BarChart data={incomeTermAverages}>
+										<CartesianGrid strokeDasharray="3 3" />
+										<XAxis dataKey="name" />
+										<YAxis label={{ value: incomeDisplayMode === "amount" ? "Average Amount" : "Average %", angle: -90, position: "insideLeft" }} />
+										<Tooltip 
+											formatter={(value, name) => {
+												if (name === "Average Amount") return `${Number(value).toLocaleString()} UGX`;
+												if (name === "Average Percentage") return `${Number(value).toFixed(1)}%`;
+												return value;
+											}}
+										/>
+										<Legend />
+										{incomeDisplayMode === "amount" ? (
+											<Bar dataKey="avgAmount" fill="#3b82f6" name="Average Amount" />
+										) : (
+											<Bar dataKey="avgPercentage" fill="#10b981" name="Average Percentage" />
+										)}
+									</BarChart>
+								</ResponsiveContainer>
+								<div className="mt-4 grid grid-cols-3 gap-4">
+									{incomeTermAverages.map((item, idx) => (
+										<div key={idx} className="p-3 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg border border-blue-200">
+											<p className="text-xs font-medium text-blue-900">{item.name}</p>
+											{incomeDisplayMode === "amount" ? (
+												<>
+													<p className="text-lg font-bold text-blue-900">
+														{item.avgAmount.toLocaleString()} UGX
+													</p>
+													<p className="text-xs text-blue-700 mt-1">
+														Avg %: {item.avgPercentage.toFixed(1)}%
+													</p>
+												</>
+											) : (
+												<>
+													<p className="text-lg font-bold text-blue-900">
+														{item.avgPercentage.toFixed(1)}%
+													</p>
+													<p className="text-xs text-blue-700 mt-1">
+														Avg Amount: {item.avgAmount.toLocaleString()} UGX
+													</p>
+												</>
+											)}
+											<p className="text-xs text-blue-600 mt-1">
+												{item.count} {item.count === 1 ? 'entry' : 'entries'}
+											</p>
+										</div>
+									))}
+								</div>
+							</div>
+						)}
 					</div>
 				) : (
 					<div className="h-[300px] flex items-center justify-center text-gray-500">
@@ -2081,50 +2693,207 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 			</div>
 
 			<div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-					<div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-						<h3 className="text-lg font-semibold text-gray-900 mb-4">Red Issues</h3>
-						{filteredIssues.length === 0 ? (
-							<p className="text-gray-500 text-center py-8">No issues found for this period</p>
-						) : (
-							<div className="space-y-0 max-h-[400px] overflow-y-auto">
-								{filteredIssues.slice(0, 8).map((issue, index) => {
-									const status = issue.status || "OPEN";
-									const statusColorMap: Record<string, { bg: string; text: string }> = {
-										OPEN: { bg: "bg-red-100", text: "text-red-800" },
-										IN_PROGRESS: { bg: "bg-yellow-100", text: "text-yellow-800" },
-										RESOLVED: { bg: "bg-green-100", text: "text-green-800" },
-									};
-									const statusColors = statusColorMap[status] || statusColorMap.OPEN;
+				<div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+					<div className="flex flex-col gap-3 mb-4">
+						<div className="flex items-center justify-between gap-2">
+							<h3 className="text-lg font-semibold text-gray-900">Red Issues</h3>
+							<div className="flex items-center gap-2 text-xs font-semibold">
+								<span className="px-2 py-1 rounded-full bg-red-100 text-red-800">Open {statusCounts.OPEN || 0}</span>
+								<span className="px-2 py-1 rounded-full bg-yellow-100 text-yellow-800">In Progress {statusCounts.IN_PROGRESS || 0}</span>
+								<span className="px-2 py-1 rounded-full bg-green-100 text-green-800">Resolved {statusCounts.RESOLVED || 0}</span>
+							</div>
+						</div>
+						<div className="flex flex-wrap items-center gap-2">
+							<div className="flex items-center gap-1.5">
+								{["ALL", "OPEN", "IN_PROGRESS", "RESOLVED"].map(status => (
+									<button
+										key={status}
+										onClick={() => setIssueStatusFilter(status as typeof issueStatusFilter)}
+										className={`px-2.5 py-1 text-xs font-semibold rounded-full transition-colors ${
+											issueStatusFilter === status
+												? status === "ALL" ? "bg-gray-700 text-white" : status === "OPEN" ? "bg-red-500 text-white" : status === "IN_PROGRESS" ? "bg-yellow-500 text-white" : "bg-green-500 text-white"
+												: "bg-gray-100 text-gray-700 hover:bg-gray-200"
+										}`}
+									>
+										{status === "ALL" ? "All" : status === "IN_PROGRESS" ? "In Progress" : status}
+									</button>
+								))}
+							</div>
+							<select
+								value={issueAssigneeFilter}
+								onChange={(e) => setIssueAssigneeFilter(e.target.value)}
+								className="px-3 py-2 text-xs font-bold border-2 border-gray-400 rounded-lg bg-gray-50 text-gray-900 hover:border-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
+							>
+								{issueAssignees.map(name => (
+									<option key={name} value={name}>{name === "ALL" ? "All" : name}</option>
+								))}
+							</select>
 
-									return (
-										<div key={issue.id}>
-											<div className="flex items-start gap-4 py-4">
+							<select
+								value={issueSort}
+								onChange={(e) => setIssueSort(e.target.value as typeof issueSort)}
+								className="px-3 py-2 text-xs font-bold border-2 border-gray-400 rounded-lg bg-gray-50 text-gray-900 hover:border-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
+							>
+								<option value="NEWEST">Newest</option>
+								<option value="OLDEST">Oldest</option>
+								<option value="LONGEST_OPEN">Longest open</option>
+							</select>
+						</div>
+					</div>
+
+					{filteredIssueList.length === 0 ? (
+						<p className="text-gray-500 text-center py-8">No issues match these filters</p>
+					) : (
+						<div className="space-y-0 max-h-[400px] overflow-y-auto">
+							{filteredIssueList.map((issue, index) => {
+								const status = issue.status || "OPEN";
+								const statusColorMap: Record<string, { bg: string; text: string }> = {
+									OPEN: { bg: "bg-red-100", text: "text-red-800" },
+									IN_PROGRESS: { bg: "bg-yellow-100", text: "text-yellow-800" },
+									RESOLVED: { bg: "bg-green-100", text: "text-green-800" },
+								};
+								const statusColors = statusColorMap[status] || statusColorMap.OPEN;
+								const ageDays = (() => {
+									const days = daysBetween(issue.createdAt, issue.resolvedAt);
+									return days == null ? "—" : `${days} day${days === 1 ? "" : "s"}`;
+								})();
+								const title = issue.issue || issue.title || "Untitled issue";
+								const isGM = userRole === "GM";
+								const isTrustee = userRole === "TRUSTEE";
+								const canUpdate = isGM && status !== "RESOLVED";
+
+								const sectionId = `red-issue-${issue.id}`;
+								const sectionReactions = reactions.filter(r => r.sectionId === sectionId);
+								const thumbsUp = sectionReactions.filter(r => r.type === "THUMBS_UP").length;
+								const thumbsDown = sectionReactions.filter(r => r.type === "THUMBS_DOWN").length;
+								const comments = sectionReactions.filter(r => r.type === "COMMENT");
+								const draft = commentDrafts[sectionId] || "";
+								const isPostingUp = postingReaction[`${sectionId}-THUMBS_UP`] || false;
+								const isPostingDown = postingReaction[`${sectionId}-THUMBS_DOWN`] || false;
+								const isPostingComment = postingReaction[`${sectionId}-COMMENT`] || false;
+
+								return (
+									<div key={issue.id}>
+										<div className="flex items-start gap-4 py-4">
+											<div className="flex items-start gap-2 flex-shrink-0">
 												<span
-													className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap flex-shrink-0 ${statusColors.bg} ${statusColors.text}`}
+													className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusColors.bg} ${statusColors.text}`}
 												>
 													{status.replace(/_/g, " ")}
 												</span>
-												<div className="flex-1 min-w-0">
-													<p className="font-bold text-gray-900 text-sm leading-5">
-														{issue.issue || issue.title || "Untitled issue"}
-													</p>
-													<p className="text-xs text-gray-600 mt-1">{issue.inCharge || "Unassigned"}</p>
-													<p className="text-[11px] text-gray-500 mt-1">
-														Posted: <span className="font-medium text-gray-700">{formatDate(issue.createdAt)}</span>
-														• {status === "RESOLVED" ? "Resolved after" : "Open for"} {(() => {
-															const days = daysBetween(issue.createdAt, issue.resolvedAt);
-															return days == null ? "—" : `${days} day${days === 1 ? "" : "s"}`;
-														})()}
-													</p>
-												</div>
+												{canUpdate && (
+													<select
+														value={status}
+														onChange={(e) => handleUpdateIssueStatus(issue.id, e.target.value)}
+														disabled={updatingIssueId === issue.id}
+														className="px-3 py-1 text-xs font-bold rounded-lg border-2 border-gray-400 bg-gray-50 text-gray-900 hover:border-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer transition-all shadow-sm w-28"
+														title="Change status"
+													>
+														<option value={status} disabled>
+															{status.replace(/_/g, " ")}
+														</option>
+														{status === "OPEN" && (
+															<>
+																<option value="IN_PROGRESS">In Progress</option>
+																<option value="RESOLVED">Resolved</option>
+															</>
+														)}
+														{status === "IN_PROGRESS" && (
+															<option value="RESOLVED">Resolved</option>
+														)}
+													</select>
+												)}
 											</div>
-											{index < filteredIssues.slice(0, 8).length - 1 && <div className="border-b border-gray-200"></div>}
+											<div className="flex-1 min-w-0">
+												<p className="font-bold text-gray-900 text-sm leading-5 truncate" title={title}>
+													{title}
+												</p>
+												<p className="text-xs text-gray-600 mt-1">{issue.inCharge || "Unassigned"}</p>
+												<p className="text-[11px] text-gray-500 mt-1">
+													Posted <span className="font-medium text-gray-700">{formatDate(issue.createdAt)}</span>
+													• {status === "RESOLVED" ? "Resolved after" : "Open for"} {ageDays}
+												</p>
+
+												{/* Trustee Reactions */}
+												{isTrustee && (
+													<div className="flex items-center gap-2 mt-2">
+														<button
+															disabled={isPostingUp}
+															onClick={() => postReaction(sectionId, "THUMBS_UP")}
+															className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border transition-colors bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:bg-blue-50"
+														>
+															👍 {thumbsUp}
+														</button>
+														<button
+															disabled={isPostingDown}
+															onClick={() => postReaction(sectionId, "THUMBS_DOWN")}
+															className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border transition-colors bg-white text-gray-700 border-gray-200 hover:border-red-400 hover:bg-red-50"
+														>
+															👎 {thumbsDown}
+														</button>
+														<button
+															onClick={() => {
+																const detailsEl = document.getElementById(`issue-comments-${issue.id}`);
+																if (detailsEl) detailsEl.toggleAttribute("open");
+															}}
+															className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border transition-colors bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:bg-blue-50"
+														>
+															💬 {comments.length}
+														</button>
+													</div>
+												)}
+
+												{/* GM View */}
+												{isGM && sectionReactions.length > 0 && (
+													<div className="flex items-center gap-2 mt-2">
+														<span className="text-xs text-gray-600">👍 {thumbsUp} 👎 {thumbsDown} 💬 {comments.length}</span>
+													</div>
+												)}
+
+												{/* Comments Section */}
+												{(isTrustee || isGM) && (
+													<details id={`issue-comments-${issue.id}`} className="mt-2">
+														<summary className="text-xs text-blue-600 cursor-pointer hover:underline">
+															{comments.length > 0 ? `View ${comments.length} comment(s)` : "Add comment"}
+														</summary>
+														<div className="mt-2 space-y-2">
+															{comments.map((c) => (
+																<div key={c.id} className="p-2 rounded bg-gray-50 border border-gray-200">
+																	<p className="text-xs text-gray-800">{c.comment}</p>
+																	<p className="mt-1 text-[10px] text-gray-500">
+																		{c.user?.name || "User"} • {new Date(c.createdAt).toLocaleString()}
+																	</p>
+																</div>
+															))}
+															{isTrustee && (
+																<div className="flex gap-2">
+																	<input
+																		value={draft}
+																		onChange={(e) => setCommentDrafts(prev => ({ ...prev, [sectionId]: e.target.value }))}
+																		placeholder="Add a comment"
+																		className="flex-1 px-2 py-1 text-xs border rounded"
+																	/>
+																	<button
+																		disabled={!draft.trim() || isPostingComment}
+																		onClick={() => postReaction(sectionId, "COMMENT", draft.trim())}
+																		className="px-2 py-1 text-xs font-semibold rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+																	>
+																		Post
+																	</button>
+																</div>
+															)}
+														</div>
+													</details>
+												)}
+											</div>
 										</div>
-									);
-								})}
-							</div>
-						)}
-					</div>
+										{index < filteredIssueList.length - 1 && <div className="border-b border-gray-200"></div>}
+									</div>
+								);
+							})}
+						</div>
+					)}
+				</div>
 
 					<div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
 						<div className="flex items-center justify-between gap-3 mb-4">
@@ -2158,6 +2927,18 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 													? "from-yellow-500 to-yellow-600"
 													: "from-red-500 to-red-600";
 									
+									const isGM = userRole === "GM";
+									const isTrustee = userRole === "TRUSTEE";
+									const sectionId = `project-${project.id}`;
+									const sectionReactions = reactions.filter(r => r.sectionId === sectionId);
+									const thumbsUp = sectionReactions.filter(r => r.type === "THUMBS_UP").length;
+									const thumbsDown = sectionReactions.filter(r => r.type === "THUMBS_DOWN").length;
+									const comments = sectionReactions.filter(r => r.type === "COMMENT");
+									const draft = commentDrafts[sectionId] || "";
+									const isPostingUp = postingReaction[`${sectionId}-THUMBS_UP`] || false;
+									const isPostingDown = postingReaction[`${sectionId}-THUMBS_DOWN`] || false;
+									const isPostingComment = postingReaction[`${sectionId}-COMMENT`] || false;
+									
 									return (
 										<div 
 											key={project.id} 
@@ -2188,7 +2969,7 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 											</div>
 
 											{/* Progress Bar with embedded percentage */}
-											<div className="relative">
+											<div className="relative mb-3">
 												<div className="flex items-center justify-between mb-1.5">
 													<span className="text-xs font-semibold text-gray-600">Progress</span>
 													<span className={`text-sm font-bold ${
@@ -2208,6 +2989,78 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 													</div>
 												</div>
 											</div>
+
+											{/* Trustee Reactions */}
+											{isTrustee && (
+												<div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+													<button
+														disabled={isPostingUp}
+														onClick={() => postReaction(sectionId, "THUMBS_UP")}
+														className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border transition-colors bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:bg-blue-50"
+													>
+														👍 {thumbsUp}
+													</button>
+													<button
+														disabled={isPostingDown}
+														onClick={() => postReaction(sectionId, "THUMBS_DOWN")}
+														className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border transition-colors bg-white text-gray-700 border-gray-200 hover:border-red-400 hover:bg-red-50"
+													>
+														👎 {thumbsDown}
+													</button>
+													<button
+														onClick={() => {
+															const detailsEl = document.getElementById(`project-comments-${project.id}`);
+															if (detailsEl) detailsEl.toggleAttribute("open");
+														}}
+														className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border transition-colors bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:bg-blue-50"
+													>
+														💬 {comments.length}
+													</button>
+												</div>
+											)}
+
+											{/* GM View */}
+											{isGM && sectionReactions.length > 0 && (
+												<div className="pt-2 border-t border-gray-100">
+													<span className="text-xs text-gray-600">👍 {thumbsUp} 👎 {thumbsDown} 💬 {comments.length}</span>
+												</div>
+											)}
+
+											{/* Comments Section */}
+											{(isTrustee || isGM) && (
+												<details id={`project-comments-${project.id}`} className="mt-2">
+													<summary className="text-xs text-blue-600 cursor-pointer hover:underline">
+														{comments.length > 0 ? `View ${comments.length} comment(s)` : "Add comment"}
+													</summary>
+													<div className="mt-2 space-y-2">
+														{comments.map((c) => (
+															<div key={c.id} className="p-2 rounded bg-gray-50 border border-gray-200">
+																<p className="text-xs text-gray-800">{c.comment}</p>
+																<p className="mt-1 text-[10px] text-gray-500">
+																	{c.user?.name || "User"} • {new Date(c.createdAt).toLocaleString()}
+																</p>
+															</div>
+														))}
+														{isTrustee && (
+															<div className="flex gap-2">
+																<input
+																	value={draft}
+																	onChange={(e) => setCommentDrafts(prev => ({ ...prev, [sectionId]: e.target.value }))}
+																	placeholder="Add a comment"
+																	className="flex-1 px-2 py-1 text-xs border rounded"
+																/>
+																<button
+																	disabled={!draft.trim() || isPostingComment}
+																	onClick={() => postReaction(sectionId, "COMMENT", draft.trim())}
+																	className="px-2 py-1 text-xs font-semibold rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+																>
+																	Post
+																</button>
+															</div>
+														)}
+													</div>
+												</details>
+											)}
 										</div>
 									);
 								})}
@@ -2315,78 +3168,232 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 						)}
 					</div>
 
-					<div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-						<div className="flex flex-col gap-3 mb-4">
-							<div>
-								<h3 className="text-lg font-semibold text-gray-900">Upcoming Events</h3>
-								<p className="text-sm text-gray-600">Add/view/manage events in Manage → Upcoming Events. Upcoming events.</p>
+					<div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+						<div className="p-6 border-b border-gray-100">
+							<div className="flex items-start justify-between mb-4">
+								<div>
+									<h3 className="text-lg font-bold text-gray-900">Upcoming Events</h3>
+									<p className="text-xs text-gray-500 mt-1">Track and manage important dates</p>
+								</div>
+								<div className="flex items-center gap-2">
+									<span className="text-xs text-gray-500 bg-gray-50 px-3 py-1 rounded-full font-medium">
+										{tableEvents.length} {tableEvents.length === 1 ? 'event' : 'events'}
+									</span>
+								</div>
 							</div>
-							<div className="flex items-center gap-2">
-								<label className="text-sm text-gray-700">Status</label>
-								<select
-									value={eventStatusFilter}
-									onChange={(e) => setEventStatusFilter(e.target.value as typeof eventStatusFilter)}
-									className="border rounded-lg px-3 py-2 text-sm font-bold text-gray-900 bg-white focus:ring-2 focus:ring-blue-500"
-								>
-									<option value="ALL">All</option>
-									<option value="ACTIVE">Active</option>
-									<option value="COMPLETED">Completed</option>
-								</select>
+							<div className="flex items-center gap-3 flex-wrap">
+								<div className="flex items-center gap-2">
+									<label className="text-xs font-medium text-gray-600">Status:</label>
+									<select
+										value={eventStatusFilter}
+										onChange={(e) => setEventStatusFilter(e.target.value as typeof eventStatusFilter)}
+										className="border-2 border-gray-200 rounded-lg px-3 py-1.5 text-xs font-semibold text-gray-900 bg-white hover:border-blue-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+									>
+										<option value="ALL">All Status</option>
+										<option value="ACTIVE">Active</option>
+										<option value="COMPLETED">Completed</option>
+									</select>
+								</div>
+
+								<div className="flex items-center gap-2">
+									<label className="text-xs font-medium text-gray-600">Priority:</label>
+									<select
+										value={eventPriorityFilter}
+										onChange={(e) => setEventPriorityFilter(e.target.value)}
+										className="border-2 border-gray-200 rounded-lg px-3 py-1.5 text-xs font-semibold text-gray-900 bg-white hover:border-blue-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+									>
+										{eventPriorities.map(p => (
+											<option key={p} value={p}>{p === "ALL" ? "All Priorities" : p}</option>
+										))}
+									</select>
+								</div>
 							</div>
 						</div>
 
 						{tableEvents.length === 0 ? (
-							<p className="text-gray-500 text-center py-6">No events found for this filter.</p>
+							<div className="p-12 text-center">
+								<div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 mb-4">
+									<svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+									</svg>
+								</div>
+								<p className="text-sm font-medium text-gray-500">No events found</p>
+								<p className="text-xs text-gray-400 mt-1">Try adjusting your filters or add new events</p>
+							</div>
 						) : (
-							<div className="overflow-x-auto max-h-[400px]">
-								<table className="min-w-full text-sm">
-									<thead className="bg-gray-50">
-										<tr>
-											<th className="px-4 py-3 text-left font-semibold text-gray-900">Date</th>
-											<th className="px-4 py-3 text-left font-semibold text-gray-900">Activity</th>
-											<th className="px-4 py-3 text-left font-semibold text-gray-900">In-Charge</th>
-											<th className="px-4 py-3 text-left font-semibold text-gray-900">Rate</th>
-											<th className="px-4 py-3 text-left font-semibold text-gray-900">Due</th>
+							<div className="overflow-x-auto max-h-[580px] overflow-y-auto">
+								<table className="min-w-full">
+									<thead>
+										<tr className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
+											{userRole === "GM" && (
+												<th className="px-4 py-3 text-center" style={{width: "50px"}}>
+													<span className="text-xs font-bold text-gray-600">✓</span>
+												</th>
+											)}
+											<th className="px-4 py-3 text-left">
+												<span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Date</span>
+											</th>
+											<th className="px-4 py-3 text-left">
+												<span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Activity</span>
+											</th>
+											<th className="px-4 py-3 text-left">
+												<span className="text-xs font-bold text-gray-700 uppercase tracking-wide">In-Charge</span>
+											</th>
+											<th className="px-4 py-3 text-center">
+												<span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Priority</span>
+											</th>
+											<th className="px-4 py-3 text-center">
+												<span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Due</span>
+											</th>
+											<th className="px-4 py-3 text-center">
+												<span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Feedback</span>
+											</th>
 										</tr>
 									</thead>
-									<tbody className="divide-y divide-gray-200">
-										{tableEvents.map((event) => {
+									<tbody className="bg-white divide-y divide-gray-100">
+										{tableEvents.map((event, index) => {
 											const priority = event.rate || event.priority || "Low";
-											const dueIn = daysUntil(event.date);
-											const dueLabel =
-												dueIn < 0
-													? `Overdue ${Math.abs(dueIn)}d`
-													: dueIn === 0
-														? "Due today"
-														: `In ${dueIn} day${dueIn === 1 ? "" : "s"}`;
+											const daysUntilEvent = daysUntil(event.date);
+											const isCompleted = completedEventIds.has(event.id);
+											const countdownBadge = 
+												daysUntilEvent < 0 ? `${Math.abs(daysUntilEvent)}d ago` :
+												daysUntilEvent === 0 ? "Today" :
+												`${daysUntilEvent}d`;
+											const urgencyColor = getUrgencyColor(daysUntilEvent, isCompleted);
+											
+											const isGM = userRole === "GM";
+											const isTrustee = userRole === "TRUSTEE";
+											const sectionId = `event-${event.id}`;
+											const sectionReactions = reactions.filter(r => r.sectionId === sectionId);
+											const thumbsUp = sectionReactions.filter(r => r.type === "THUMBS_UP").length;
+											const thumbsDown = sectionReactions.filter(r => r.type === "THUMBS_DOWN").length;
+											const comments = sectionReactions.filter(r => r.type === "COMMENT");
+											const draft = commentDrafts[sectionId] || "";
+											const isPostingUp = postingReaction[`${sectionId}-THUMBS_UP`] || false;
+											const isPostingDown = postingReaction[`${sectionId}-THUMBS_DOWN`] || false;
+											const isPostingComment = postingReaction[`${sectionId}-COMMENT`] || false;
+											
 											return (
-												<tr key={event.id} className="hover:bg-gray-50">
-													<td className="px-4 py-3 text-gray-900 text-xs">{new Date(event.date).toLocaleDateString()}</td>
-													<td className="px-4 py-3 text-gray-900 font-medium text-xs">{event.activity}</td>
-													<td className="px-4 py-3 text-gray-700 text-xs">{event.inCharge}</td>
-													<td className="px-4 py-3">
-														<span
-															className={`px-2 py-1 rounded text-[10px] font-semibold whitespace-nowrap ${
-																priority === "High"
-																	? "bg-red-100 text-red-800"
-																	: priority === "Medium"
-																		? "bg-yellow-100 text-yellow-800"
-																		: "bg-green-100 text-green-800"
-															}`}
-														>
-															{priority}
-														</span>
-													</td>
-													<td className="px-4 py-3">
-														<span
-															className={`text-[10px] font-semibold ${
-																dueIn < 0 ? "text-red-700" : dueIn === 0 ? "text-amber-700" : "text-gray-700"
-															}`}
-														>
-															{dueLabel}
-														</span>
-													</td>
-												</tr>
+												<>
+													<tr 
+														key={event.id} 
+														className={`hover:bg-blue-50/50 transition-colors ${isCompleted ? "bg-gray-50/50" : index % 2 === 0 ? "bg-white" : "bg-gray-50/30"}`}
+													>
+														{userRole === "GM" && (
+															<td className="px-4 py-3.5 text-center">
+																<input
+																	type="checkbox"
+																	checked={isCompleted}
+																	onChange={() => handleToggleEventCompletion(event.id)}
+																	className="w-4 h-4 cursor-pointer rounded border-2 border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0"
+																/>
+															</td>
+														)}
+														<td className={`px-4 py-3.5 ${isCompleted ? "line-through text-gray-400" : "text-gray-900"}`}>
+															<span className="text-xs font-semibold">{new Date(event.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+														</td>
+														<td className={`px-4 py-3.5 ${isCompleted ? "line-through text-gray-400" : "text-gray-900"}`}>
+															<span className="text-sm font-medium">{event.activity}</span>
+														</td>
+														<td className={`px-4 py-3.5 ${isCompleted ? "line-through text-gray-400" : "text-gray-700"}`}>
+															<span className="text-xs">{event.inCharge}</span>
+														</td>
+														<td className="px-4 py-3.5 text-center">
+															<span
+																className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${
+																	priority === "High"
+																		? "bg-red-100 text-red-700 ring-1 ring-red-200"
+																		: priority === "Medium"
+																			? "bg-amber-100 text-amber-700 ring-1 ring-amber-200"
+																			: "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200"
+																} ${isCompleted ? "opacity-40" : ""}`}
+															>
+																{priority}
+															</span>
+														</td>
+														<td className="px-4 py-3.5 text-center">
+															<span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${urgencyColor} ${isCompleted ? "" : "ring-1"} ${
+																daysUntilEvent < 0 && !isCompleted ? "ring-red-200 animate-pulse" : 
+																daysUntilEvent === 0 && !isCompleted ? "ring-amber-200" : 
+																!isCompleted ? "ring-gray-200" : ""
+															}`}>
+																{countdownBadge}
+															</span>
+														</td>
+														<td className="px-4 py-3.5 text-center">
+															{isTrustee && (
+																<div className="flex items-center justify-center gap-1">
+																	<button
+																		disabled={isPostingUp}
+																		onClick={() => postReaction(sectionId, "THUMBS_UP")}
+																		className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border transition-colors bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:bg-blue-50"
+																	>
+																		👍 {thumbsUp}
+																	</button>
+																	<button
+																		disabled={isPostingDown}
+																		onClick={() => postReaction(sectionId, "THUMBS_DOWN")}
+																		className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border transition-colors bg-white text-gray-700 border-gray-200 hover:border-red-400 hover:bg-red-50"
+																	>
+																		👎 {thumbsDown}
+																	</button>
+																	<button
+																		onClick={() => {
+																			const detailsEl = document.getElementById(`event-comments-${event.id}`);
+																			if (detailsEl) detailsEl.toggleAttribute("open");
+																		}}
+																		className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border transition-colors bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:bg-blue-50"
+																	>
+																		💬 {comments.length}
+																	</button>
+																</div>
+															)}
+															{isGM && (
+																<span className="text-xs text-gray-600">
+																	{sectionReactions.length > 0 ? `👍 ${thumbsUp} 👎 ${thumbsDown} 💬 ${comments.length}` : "—"}
+																</span>
+															)}
+														</td>
+													</tr>
+													{(isTrustee || isGM) && (
+														<tr key={`${event.id}-comments`} className="bg-gray-50/30">
+															<td colSpan={userRole === "GM" ? 7 : 6} className="px-4 py-2">
+																<details id={`event-comments-${event.id}`} className="text-xs">
+																	<summary className="text-blue-600 cursor-pointer hover:underline font-medium">
+																		{comments.length > 0 ? `View ${comments.length} comment(s)` : "Add comment"}
+																	</summary>
+																	<div className="mt-2 space-y-2">
+																		{comments.map((c) => (
+																			<div key={c.id} className="p-2 rounded bg-white border border-gray-200">
+																				<p className="text-xs text-gray-800">{c.comment}</p>
+																				<p className="mt-1 text-[10px] text-gray-500">
+																					{c.user?.name || "User"} • {new Date(c.createdAt).toLocaleString()}
+																				</p>
+																			</div>
+																		))}
+																		{isTrustee && (
+																			<div className="flex gap-2">
+																				<input
+																					value={draft}
+																					onChange={(e) => setCommentDrafts(prev => ({ ...prev, [sectionId]: e.target.value }))}
+																					placeholder="Add a comment"
+																					className="flex-1 px-2 py-1 text-xs border rounded"
+																				/>
+																				<button
+																					disabled={!draft.trim() || isPostingComment}
+																					onClick={() => postReaction(sectionId, "COMMENT", draft.trim())}
+																					className="px-2 py-1 text-xs font-semibold rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+																				>
+																					Post
+																				</button>
+																			</div>
+																		)}
+																	</div>
+																</details>
+															</td>
+														</tr>
+													)}
+												</>
 											);
 										})}
 									</tbody>

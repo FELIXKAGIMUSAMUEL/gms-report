@@ -4,7 +4,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
-import { DocumentDownloadIcon, ArrowDownTrayIcon } from "@heroicons/react/24/outline";
+import { ArrowDownTrayIcon } from "@heroicons/react/24/outline";
 import * as XLSX from "xlsx";
 
 interface ExportFormat {
