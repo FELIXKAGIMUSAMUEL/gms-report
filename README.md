@@ -56,20 +56,20 @@ A modern, real-time web application for non-profit/educational organizations to 
 ## 👤 Login Credentials
 
 ### General Manager
-- **Email**: `gm@sak.org`
-- **Password**: `gm123`
+- **Email**: `gm@g`
+- **Password**: `gm13`
 - **Access**: Create/edit weekly reports, all data
 
 ### Board Trustee
-- **Email**: `trustee@sak.org`
-- **Password**: `trustee123`
+- **Email**: `t`
+- **Password**: ``
 - **Access**: View dashboard, add reactions/comments
 
 ## 📖 How to Use
 
 ### As General Manager
 
-1. **Login** with `gm@sak.org / gm123`
+1. **Login** with `grg / 3`
 2. **Navigate** using the sidebar:
    - 🏠 Dashboard - View current week's report
    - ✏️ Update Report - Enter this week's data
@@ -82,7 +82,7 @@ A modern, real-time web application for non-profit/educational organizations to 
 
 ### As Trustee
 
-1. **Login** with `trustee@sak.org / trustee123`
+1. **Login** with `trg / t23`
 2. **View Dashboard** - See latest weekly report
 3. **React to Sections**:
    - Click 👍 for approval
