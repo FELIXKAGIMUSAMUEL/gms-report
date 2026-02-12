@@ -237,8 +237,8 @@ NEXTAUTH_URL="https://your-domain.com"
 - Login: http://localhost:3000/login
 
 **Test Accounts**:
-- GM: `gm@sak.org` / `gm123`
-- Trustee: `trustee@sak.org` / `trustee123`
+- GM: `grg` / `g3`
+- Trustee: `trg` / `tr`
 
 ---
 
@@ -252,3 +252,4 @@ or use of this software, via any medium, is strictly prohibited.
 ---
 
 **Built with ❤️ for executive-level reporting**
+**Built by Mayega Mustafa whatsapp +256 776003035.**
