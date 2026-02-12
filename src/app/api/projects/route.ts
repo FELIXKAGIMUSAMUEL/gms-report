@@ -11,10 +11,10 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const status = searchParams.get("status") || "ACTIVE";
+    const status = searchParams.get("status");
 
     const projects = await prisma.gMProject.findMany({
-      where: { status: status as any },
+      where: status && status !== "ALL" ? { status: status as any } : undefined,
       orderBy: {
         createdAt: "desc",
       },
@@ -29,6 +29,15 @@ export async function GET(request: Request) {
     );
   }
 }
+
+const normalizeItemStatus = (status?: string | null) => {
+  if (!status) return "ACTIVE";
+  const normalized = status.trim().toUpperCase();
+  if (normalized === "COMPLETED" || normalized === "DONE") return "COMPLETED";
+  if (normalized === "ACTIVE") return "ACTIVE";
+  if (normalized === "IN PROGRESS" || normalized === "IN_PROGRESS") return "ACTIVE";
+  return "ACTIVE";
+};
 
 export async function POST(request: Request) {
   try {
@@ -58,10 +67,7 @@ export async function POST(request: Request) {
     }
 
     // Map frontend status to database ItemStatus enum
-    let dbStatus = "ACTIVE";
-    if (status === "Completed") {
-      dbStatus = "COMPLETED";
-    }
+    const dbStatus = normalizeItemStatus(status);
 
     const project = await prisma.gMProject.create({
       data: {
@@ -102,12 +108,7 @@ export async function PUT(request: Request) {
     }
 
     // Map frontend status to database ItemStatus enum
-    let dbStatus = status;
-    if (status === "Completed") {
-      dbStatus = "COMPLETED";
-    } else if (status && status !== "ACTIVE" && status !== "COMPLETED") {
-      dbStatus = "ACTIVE"; // Default to ACTIVE for other statuses
-    }
+    const dbStatus = normalizeItemStatus(status);
 
     const project = await prisma.gMProject.update({
       where: { id },
@@ -145,12 +146,7 @@ export async function PATCH(request: Request) {
     }
 
     // Map frontend status to database ItemStatus enum
-    let dbStatus = status;
-    if (status === "Completed") {
-      dbStatus = "COMPLETED";
-    } else if (status && status !== "ACTIVE" && status !== "COMPLETED") {
-      dbStatus = "ACTIVE"; // Default to ACTIVE for other statuses
-    }
+    const dbStatus = normalizeItemStatus(status);
 
     const updateData: any = {};
     if (progress !== undefined) updateData.progress = parseFloat(progress);

@@ -3,85 +3,25 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get current and previous month data for comparisons
-    const currentYear = 2026;
-    const currentMonth = 6; // June 2026
-    const previousMonth = 5;
+    const url = new URL(request.url);
+    const yearParam = url.searchParams.get("year");
+    const year = yearParam ? parseInt(yearParam, 10) : new Date().getFullYear();
 
-    const currentData = await prisma.kPIData.findUnique({
+    const kpis = await prisma.kPIData.findMany({
       where: {
-        month_year: {
-          month: currentMonth,
-          year: currentYear,
-        },
+        year,
+      },
+      orderBy: {
+        month: "asc",
       },
     });
-
-    const previousData = await prisma.kPIData.findUnique({
-      where: {
-        month_year: {
-          month: previousMonth,
-          year: currentYear,
-        },
-      },
-    });
-
-    if (!currentData) {
-      return NextResponse.json({ error: "No data found" }, { status: 404 });
-    }
-
-    // Calculate trends
-    const kpis = {
-      feesCollection: {
-        current: currentData.feesCollectionPercent,
-        previous: previousData?.feesCollectionPercent || 0,
-        trend: previousData
-          ? currentData.feesCollectionPercent - previousData.feesCollectionPercent
-          : 0,
-      },
-      schoolsExpenditure: {
-        current: currentData.schoolsExpenditurePercent,
-        previous: previousData?.schoolsExpenditurePercent || 0,
-        trend: previousData
-          ? currentData.schoolsExpenditurePercent - previousData.schoolsExpenditurePercent
-          : 0,
-      },
-      infrastructure: {
-        current: currentData.infrastructurePercent,
-        previous: previousData?.infrastructurePercent || 0,
-        trend: previousData
-          ? currentData.infrastructurePercent - previousData.infrastructurePercent
-          : 0,
-      },
-      totalEnrollment: {
-        current: currentData.totalEnrollment,
-        previous: previousData?.totalEnrollment || 0,
-        trend: previousData
-          ? currentData.totalEnrollment - previousData.totalEnrollment
-          : 0,
-      },
-      theologyEnrollment: {
-        current: currentData.theologyEnrollment,
-        previous: previousData?.theologyEnrollment || 0,
-        trend: previousData
-          ? currentData.theologyEnrollment - previousData.theologyEnrollment
-          : 0,
-      },
-      p7PrepExams: {
-        current: currentData.p7PrepExamsPercent,
-        previous: previousData?.p7PrepExamsPercent || 0,
-        trend: previousData
-          ? currentData.p7PrepExamsPercent - previousData.p7PrepExamsPercent
-          : 0,
-      },
-    };
 
     return NextResponse.json(kpis);
   } catch (error) {

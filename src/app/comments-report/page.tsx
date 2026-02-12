@@ -30,6 +30,10 @@ interface Comment {
     inCharge?: string;
     date?: string;
   } | null;
+  kpiValue?: {
+    label: string;
+    value: string;
+  } | null;
 }
 
 const currentYear = new Date().getFullYear();
@@ -44,33 +48,15 @@ export default function CommentsReportPage() {
     return date.toISOString().split('T')[0];
   });
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [selectedCategory, setSelectedCategory] = useState("all");
-  const [selectedField, setSelectedField] = useState("all");
-  const [selectedGM, setSelectedGM] = useState("all");
+  const [selectedUserType, setSelectedUserType] = useState("all");
   
   const [comments, setComments] = useState<Comment[]>([]);
   const [filteredComments, setFilteredComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const fieldLabels: Record<string, string> = {
-    feesComment: "Fees Collection",
-    expenditureComment: "Expenditure",
-    infrastructureComment: "Infrastructure",
-    enrollmentComment: "Enrollment",
-    theologyComment: "Theology Enrollment",
-    p7prepComment: "P.7 Prep",
-    syllabusComment: "Syllabus Coverage",
-    admissionsComment: "Admissions",
-  };
-
-  const categoryLabels: Record<string, string> = {
-    all: "All Categories",
-    kpi: "KPI Comments",
-    "red-issues": "Red Issues Feedback",
-    projects: "Project Feedback",
-    events: "Event Feedback",
-  };
+  
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -86,7 +72,8 @@ export default function CommentsReportPage() {
 
   useEffect(() => {
     filterComments();
-  }, [comments, startDate, endDate, selectedCategory, selectedField, selectedGM]);
+    setCurrentPage(1); // Reset to first page when filters change
+  }, [comments, startDate, endDate, selectedUserType]);
 
   const fetchComments = async () => {
     try {
@@ -116,19 +103,11 @@ export default function CommentsReportPage() {
       filtered = filtered.filter(c => new Date(c.createdAt) <= end);
     }
 
-    // Filter by category
-    if (selectedCategory !== "all") {
-      filtered = filtered.filter(c => c.category === selectedCategory);
-    }
-
-    // Filter by field (only for KPI comments)
-    if (selectedField !== "all") {
-      filtered = filtered.filter(c => c.category === "kpi" && c.field === selectedField);
-    }
-
-    // Filter by GM
-    if (selectedGM !== "all") {
-      filtered = filtered.filter(c => c.report?.generalManager === selectedGM);
+    // Filter by user type
+    if (selectedUserType === "trustees") {
+      filtered = filtered.filter(c => c.user !== null && c.user !== undefined);
+    } else if (selectedUserType === "gm") {
+      filtered = filtered.filter(c => !c.user && c.report?.generalManager);
     }
 
     // Sort by date descending
@@ -141,7 +120,16 @@ export default function CommentsReportPage() {
     window.print();
   };
 
-  const uniqueGMs = Array.from(new Set(comments.map(c => c.report?.generalManager).filter(Boolean)));
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredComments.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedComments = filteredComments.slice(startIndex, endIndex);
+
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   if (status === "loading") {
     return (
@@ -164,7 +152,7 @@ export default function CommentsReportPage() {
         {/* Filters */}
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-6 print:hidden">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Filter Options</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-semibold text-gray-900 mb-2">Start Date</label>
               <input
@@ -184,48 +172,21 @@ export default function CommentsReportPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-gray-900 mb-2">Report Type</label>
+              <label className="block text-sm font-semibold text-gray-900 mb-2">Filter by User</label>
               <select
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
+                value={selectedUserType}
+                onChange={(e) => setSelectedUserType(e.target.value)}
                 className="w-full px-3 py-2 border-2 border-gray-400 rounded-lg text-sm font-medium text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
               >
-                {Object.entries(categoryLabels).map(([key, label]) => (
-                  <option key={key} value={key}>{label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-900 mb-2">KPI Field</label>
-              <select
-                value={selectedField}
-                onChange={(e) => setSelectedField(e.target.value)}
-                disabled={selectedCategory !== "all" && selectedCategory !== "kpi"}
-                className="w-full px-3 py-2 border-2 border-gray-400 rounded-lg text-sm font-medium text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed cursor-pointer"
-              >
-                <option value="all">All KPI Fields</option>
-                {Object.entries(fieldLabels).map(([key, label]) => (
-                  <option key={key} value={key}>{label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-900 mb-2">General Manager</label>
-              <select
-                value={selectedGM}
-                onChange={(e) => setSelectedGM(e.target.value)}
-                className="w-full px-3 py-2 border-2 border-gray-400 rounded-lg text-sm font-medium text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
-              >
-                <option value="all">All GMs</option>
-                {uniqueGMs.map((gm) => (
-                  <option key={gm} value={gm}>{gm}</option>
-                ))}
+                <option value="all">All Users</option>
+                <option value="trustees">Trustees Only</option>
+                <option value="gm">General Manager Only</option>
               </select>
             </div>
           </div>
           <div className="mt-4 flex items-center justify-between">
             <div className="text-sm text-gray-600">
-              Showing <strong>{filteredComments.length}</strong> comment{filteredComments.length !== 1 ? 's' : ''}
+              Showing <strong>{startIndex + 1}-{Math.min(endIndex, filteredComments.length)}</strong> of <strong>{filteredComments.length}</strong> comment{filteredComments.length !== 1 ? 's' : ''}
             </div>
             <button
               onClick={handlePrint}
@@ -257,14 +218,14 @@ export default function CommentsReportPage() {
             {/* Print Header */}
             <div className="hidden print:block border-b-2 border-gray-800 pb-4 mb-6">
               <div className="text-center">
-                <h1 className="text-2xl font-bold text-gray-900">SIR APOLLO KAGGWA SCHOOLS</h1>
+                <h1 className="text-2xl font-bold text-gray-900">SIR APOLLO KAGGWA SCHOOLS - SINCE 1996</h1>
                 <p className="text-sm text-gray-600 mt-1">COMMENTS & FEEDBACK REPORT</p>
                 <div className="mt-3 text-xs text-gray-600">
                   <p>Report Generated: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
                   <p>Period: {new Date(startDate).toLocaleDateString('en-GB')} to {new Date(endDate).toLocaleDateString('en-GB')}</p>
-                  {selectedCategory !== "all" && <p>Report Type: {categoryLabels[selectedCategory]}</p>}
-                  {selectedField !== "all" && <p>KPI Field: {fieldLabels[selectedField]}</p>}
-                  {selectedGM !== "all" && <p>General Manager: {selectedGM}</p>}
+                  {selectedUserType !== "all" && (
+                    <p>Filter: {selectedUserType === "trustees" ? "Trustees Only" : "General Managers Only"}</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -284,7 +245,8 @@ export default function CommentsReportPage() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {filteredComments.map((comment, index) => {
+                  {paginatedComments.map((comment, index) => {
+                    const globalIndex = startIndex + index;
                     const categoryColor = 
                       comment.category === "kpi" ? "border-blue-500" :
                       comment.category === "red-issues" ? "border-red-500" :
@@ -297,20 +259,37 @@ export default function CommentsReportPage() {
                       comment.category === "projects" ? "bg-purple-100 text-purple-800" :
                       "bg-amber-100 text-amber-800";
 
+                    const categoryLabel = 
+                      comment.category === "kpi" ? "KPI" :
+                      comment.category === "red-issues" ? "Red Issue" :
+                      comment.category === "projects" ? "Project" :
+                      "Event";
+
+                    const fieldLabel = 
+                      comment.field === "feesComment" ? "Fees Collection" :
+                      comment.field === "expenditureComment" ? "Expenditure" :
+                      comment.field === "infrastructureComment" ? "Infrastructure" :
+                      comment.field === "enrollmentComment" ? "Enrollment" :
+                      comment.field === "theologyComment" ? "Theology Enrollment" :
+                      comment.field === "p7prepComment" ? "P.7 Prep" :
+                      comment.field === "syllabusComment" ? "Syllabus Coverage" :
+                      comment.field === "admissionsComment" ? "Admissions" :
+                      comment.field;
+
                     return (
                       <div key={comment.id} className={`border-l-4 ${categoryColor} pl-4 py-2 page-break-inside-avoid`}>
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex-1">
                             <div className="flex items-center gap-3 text-xs text-gray-600 mb-1 flex-wrap">
-                              <span className="font-semibold text-gray-900">#{index + 1}</span>
+                              <span className="font-semibold text-gray-900">#{globalIndex + 1}</span>
                               <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase ${categoryBadge}`}>
-                                {categoryLabels[comment.category]}
+                                {categoryLabel}
                               </span>
                               <span>{new Date(comment.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                               {comment.category === "kpi" && (
                                 <>
                                   <span>•</span>
-                                  <span className="font-medium">{fieldLabels[comment.field] || comment.field}</span>
+                                  <span className="font-medium">{fieldLabel}</span>
                                 </>
                               )}
                               {comment.report && (
@@ -321,6 +300,16 @@ export default function CommentsReportPage() {
                               )}
                             </div>
                             
+                            {/* KPI Value Details */}
+                            {comment.kpiValue && (
+                              <div className="text-xs text-gray-700 mb-2 bg-blue-50 p-2 rounded border border-blue-200">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-semibold text-blue-900">{comment.kpiValue.label}:</span>
+                                  <span className="text-lg font-bold text-blue-700">{comment.kpiValue.value}</span>
+                                </div>
+                              </div>
+                            )}
+
                             {/* Item Details for Red Issues, Projects, Events */}
                             {comment.itemDetails && (
                               <div className="text-xs text-gray-700 mb-2 bg-gray-50 p-2 rounded">
@@ -359,6 +348,78 @@ export default function CommentsReportPage() {
                   })}
                 </div>
               )}
+
+              {/* Pagination Controls */}
+              {filteredComments.length > itemsPerPage && (
+                <div className="mt-6 flex items-center justify-center gap-2 print:hidden">
+                  <button
+                    onClick={() => goToPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  
+                  <div className="flex items-center gap-1">
+                    {/* First page */}
+                    {currentPage > 3 && (
+                      <>
+                        <button
+                          onClick={() => goToPage(1)}
+                          className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                        >
+                          1
+                        </button>
+                        {currentPage > 4 && <span className="px-2 text-gray-500">...</span>}
+                      </>
+                    )}
+
+                    {/* Page numbers around current page */}
+                    {Array.from({ length: totalPages }, (_, i) => i + 1)
+                      .filter(page => {
+                        return page === currentPage ||
+                               page === currentPage - 1 ||
+                               page === currentPage - 2 ||
+                               page === currentPage + 1 ||
+                               page === currentPage + 2;
+                      })
+                      .map(page => (
+                        <button
+                          key={page}
+                          onClick={() => goToPage(page)}
+                          className={`px-3 py-2 border rounded-lg text-sm font-medium ${
+                            page === currentPage
+                              ? 'bg-blue-600 text-white border-blue-600'
+                              : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      ))}
+
+                    {/* Last page */}
+                    {currentPage < totalPages - 2 && (
+                      <>
+                        {currentPage < totalPages - 3 && <span className="px-2 text-gray-500">...</span>}
+                        <button
+                          onClick={() => goToPage(totalPages)}
+                          className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                        >
+                          {totalPages}
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => goToPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Print Footer */}
@@ -373,18 +434,44 @@ export default function CommentsReportPage() {
       <style jsx global>{`
         @media print {
           @page {
-            margin: 2cm;
+            margin: 1.5cm;
             size: A4;
           }
           
           body {
             print-color-adjust: exact;
             -webkit-print-color-adjust: exact;
+            font-size: 12pt !important;
           }
 
           .page-break-inside-avoid {
             page-break-inside: avoid;
             break-inside: avoid;
+          }
+
+          /* Increase font sizes for print */
+          h1 {
+            font-size: 20pt !important;
+          }
+
+          h2 {
+            font-size: 16pt !important;
+          }
+
+          p, span, div {
+            font-size: 11pt !important;
+          }
+
+          .text-xs, .text-sm {
+            font-size: 10pt !important;
+          }
+
+          .text-lg {
+            font-size: 14pt !important;
+          }
+
+          .text-2xl {
+            font-size: 18pt !important;
           }
         }
       `}</style>

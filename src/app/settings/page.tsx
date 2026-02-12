@@ -4,7 +4,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
-import { CalendarIcon, CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/outline";
+import { CalendarIcon, CheckCircleIcon, XCircleIcon, BuildingOfficeIcon, AcademicCapIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
 
 interface TermSetting {
 	id?: string;
@@ -15,6 +15,16 @@ interface TermSetting {
 	weeksCount: number;
 }
 
+interface School {
+	id: string;
+	name: string;
+}
+
+interface Department {
+	id: string;
+	name: string;
+}
+
 export default function SettingsPage() {
 	const { data: session, status } = useSession();
 	const router = useRouter();
@@ -22,6 +32,13 @@ export default function SettingsPage() {
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
 	const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+	
+	// Schools & Departments
+	const [schools, setSchools] = useState<School[]>([]);
+	const [departments, setDepartments] = useState<Department[]>([]);
+	const [newSchoolName, setNewSchoolName] = useState("");
+	const [newDepartmentName, setNewDepartmentName] = useState("");
+	const [activeTab, setActiveTab] = useState<"terms" | "schools">("terms");
 
 	// Initialize with current year and 3 terms
 	const currentYear = new Date().getFullYear();
@@ -47,6 +64,8 @@ export default function SettingsPage() {
 
 	useEffect(() => {
 		fetchTermSettings();
+		fetchSchools();
+		fetchDepartments();
 	}, []);
 
 	const fetchTermSettings = async () => {
@@ -181,6 +200,124 @@ export default function SettingsPage() {
 		}
 	};
 
+	const fetchSchools = async () => {
+		try {
+			const response = await fetch("/api/schools");
+			if (response.ok) {
+				const data = await response.json();
+				setSchools(data.data || []);
+			}
+		} catch (error) {
+			console.error("Error fetching schools:", error);
+		}
+	};
+
+	const fetchDepartments = async () => {
+		try {
+			const response = await fetch("/api/departments");
+			if (response.ok) {
+				const data = await response.json();
+				setDepartments(data.data || []);
+			}
+		} catch (error) {
+			console.error("Error fetching departments:", error);
+		}
+	};
+
+	const handleAddSchool = async (e: React.FormEvent) => {
+		e.preventDefault();
+		if (!newSchoolName.trim()) return;
+
+		try {
+			const response = await fetch("/api/schools", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ name: newSchoolName.trim() }),
+			});
+
+			if (response.ok) {
+				setNewSchoolName("");
+				await fetchSchools();
+				setMessage({ type: "success", text: "School added successfully" });
+				setTimeout(() => setMessage(null), 3000);
+			} else {
+				const error = await response.json();
+				setMessage({ type: "error", text: error.error || "Failed to add school" });
+			}
+		} catch (err) {
+			setMessage({ type: "error", text: "Failed to add school" });
+		}
+	};
+
+	const handleDeleteSchool = async (id: string) => {
+		if (!confirm("Delete this school? This cannot be undone.")) return;
+
+		try {
+			const response = await fetch("/api/schools", {
+				method: "DELETE",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ id }),
+			});
+
+			if (response.ok) {
+				await fetchSchools();
+				setMessage({ type: "success", text: "School deleted successfully" });
+				setTimeout(() => setMessage(null), 3000);
+			} else {
+				setMessage({ type: "error", text: "Failed to delete school" });
+			}
+		} catch (err) {
+			setMessage({ type: "error", text: "Failed to delete school" });
+		}
+	};
+
+	const handleAddDepartment = async (e: React.FormEvent) => {
+		e.preventDefault();
+		if (!newDepartmentName.trim()) return;
+
+		try {
+			const response = await fetch("/api/departments", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ name: newDepartmentName.trim() }),
+			});
+
+			if (response.ok) {
+				setNewDepartmentName("");
+				await fetchDepartments();
+				setMessage({ type: "success", text: "Department added successfully" });
+				setTimeout(() => setMessage(null), 3000);
+			} else {
+				const error = await response.json();
+				setMessage({ type: "error", text: error.error || "Failed to add department" });
+			}
+		} catch (err) {
+			setMessage({ type: "error", text: "Failed to add department" });
+		}
+	};
+
+	const handleDeleteDepartment = async (id: string) => {
+		if (!confirm("Delete this department? This cannot be undone.")) return;
+
+		try {
+			const response = await fetch("/api/departments", {
+				method: "DELETE",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ id }),
+			});
+
+			if (response.ok) {
+				await fetchDepartments();
+				setMessage({ type: "success", text: "Department deleted successfully" });
+				setTimeout(() => setMessage(null), 3000);
+			} else {
+				setMessage({ type: "error", text: "Failed to delete department" });
+			}
+		} catch (err) {
+			setMessage({ type: "error", text: "Failed to delete department" });
+		}
+	};
+
 	if (status === "loading" || loading) {
 		return (
 			<DashboardLayout>
@@ -204,11 +341,42 @@ export default function SettingsPage() {
 		<DashboardLayout>
 			<div className="max-w-6xl mx-auto py-8 px-4">
 				<div className="mb-8">
-					<h1 className="text-3xl font-bold text-gray-900 mb-2">Term Settings</h1>
+					<h1 className="text-3xl font-bold text-gray-900 mb-2">Settings</h1>
 					<p className="text-gray-600">
-						Configure the start and end dates for each academic term. This helps the system track weekly
-						report deadlines and send timely reminders.
+						Configure system settings, manage schools, departments, and academic terms.
 					</p>
+				</div>
+
+				{/* Tabs */}
+				<div className="mb-6 border-b border-gray-200">
+					<nav className="flex gap-8">
+						<button
+							onClick={() => setActiveTab("terms")}
+							className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+								activeTab === "terms"
+									? "border-blue-600 text-blue-600"
+									: "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+							}`}
+						>
+							<div className="flex items-center gap-2">
+								<CalendarIcon className="w-5 h-5" />
+								Term Settings
+							</div>
+						</button>
+						<button
+							onClick={() => setActiveTab("schools")}
+							className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+								activeTab === "schools"
+									? "border-blue-600 text-blue-600"
+									: "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+							}`}
+						>
+							<div className="flex items-center gap-2">
+								<BuildingOfficeIcon className="w-5 h-5" />
+								Schools & Departments
+							</div>
+						</button>
+					</nav>
 				</div>
 
 				{message && (
@@ -227,6 +395,17 @@ export default function SettingsPage() {
 						<span>{message.text}</span>
 					</div>
 				)}
+
+				{/* Term Settings Tab */}
+				{activeTab === "terms" && (
+				<div>
+					<div className="mb-6">
+						<h2 className="text-xl font-bold text-gray-900 mb-2">Academic Term Configuration</h2>
+						<p className="text-sm text-gray-600">
+							Configure the start and end dates for each academic term. This helps the system track weekly
+							report deadlines and send timely reminders.
+						</p>
+					</div>
 
 				{/* Year Selector */}
 				<div className="mb-8 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -361,6 +540,144 @@ export default function SettingsPage() {
 						<li>Statistics and trends will be accurately tracked based on these dates</li>
 					</ul>
 				</div>
+				</div>
+				)}
+
+				{/* Schools & Departments Tab */}
+				{activeTab === "schools" && (
+				<div>
+					<div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+						{/* Schools Management */}
+						<div className="bg-white p-6 rounded-lg shadow-sm border-2 border-blue-200">
+							<div className="flex items-center gap-3 mb-6">
+								<div className="p-2 bg-blue-100 rounded-lg">
+									<BuildingOfficeIcon className="w-6 h-6 text-blue-600" />
+								</div>
+								<div>
+									<h2 className="text-xl font-semibold text-gray-900">School Management</h2>
+									<p className="text-sm text-gray-600 mt-1">Add and manage schools in the system</p>
+								</div>
+							</div>
+							
+							<form onSubmit={handleAddSchool} className="mb-6">
+								<div className="flex gap-2">
+									<input
+										type="text"
+										value={newSchoolName}
+										onChange={(e) => setNewSchoolName(e.target.value)}
+										placeholder="Enter school name"
+										className="flex-1 px-4 py-2 border-2 border-gray-300 rounded-lg text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+									/>
+									<button
+										type="submit"
+										className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
+									>
+										<PlusIcon className="w-4 h-4" />
+										Add
+									</button>
+								</div>
+							</form>
+
+							<div className="space-y-2">
+								<div className="flex items-center justify-between mb-3">
+									<h3 className="text-sm font-semibold text-gray-700">All Schools ({schools.length})</h3>
+								</div>
+								<div className="grid grid-cols-1 gap-2 max-h-96 overflow-y-auto">
+									{schools.map((school) => (
+										<div
+											key={school.id}
+											className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-blue-300 transition-colors"
+										>
+											<span className="text-sm font-medium text-gray-900">{school.name}</span>
+											<button
+												onClick={() => handleDeleteSchool(school.id)}
+												className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+												title="Delete school"
+											>
+												<TrashIcon className="w-4 h-4" />
+											</button>
+										</div>
+									))}
+									{schools.length === 0 && (
+										<div className="text-center py-8 text-gray-500 text-sm">
+											No schools added yet
+										</div>
+									)}
+								</div>
+							</div>
+						</div>
+
+						{/* Departments Management */}
+						<div className="bg-white p-6 rounded-lg shadow-sm border-2 border-purple-200">
+							<div className="flex items-center gap-3 mb-6">
+								<div className="p-2 bg-purple-100 rounded-lg">
+									<AcademicCapIcon className="w-6 h-6 text-purple-600" />
+								</div>
+								<div>
+									<h2 className="text-xl font-semibold text-gray-900">Department Management</h2>
+									<p className="text-sm text-gray-600 mt-1">Add and manage departments</p>
+								</div>
+							</div>
+							
+							<form onSubmit={handleAddDepartment} className="mb-6">
+								<div className="flex gap-2">
+									<input
+										type="text"
+										value={newDepartmentName}
+										onChange={(e) => setNewDepartmentName(e.target.value)}
+										placeholder="Enter department name"
+										className="flex-1 px-4 py-2 border-2 border-gray-300 rounded-lg text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+									/>
+									<button
+										type="submit"
+										className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors flex items-center gap-2"
+									>
+										<PlusIcon className="w-4 h-4" />
+										Add
+									</button>
+								</div>
+							</form>
+
+							<div className="space-y-2">
+								<div className="flex items-center justify-between mb-3">
+									<h3 className="text-sm font-semibold text-gray-700">All Departments ({departments.length})</h3>
+								</div>
+								<div className="grid grid-cols-1 gap-2 max-h-96 overflow-y-auto">
+									{departments.map((dept) => (
+										<div
+											key={dept.id}
+											className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-purple-300 transition-colors"
+										>
+											<span className="text-sm font-medium text-gray-900">{dept.name}</span>
+											<button
+												onClick={() => handleDeleteDepartment(dept.id)}
+												className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+												title="Delete department"
+											>
+												<TrashIcon className="w-4 h-4" />
+											</button>
+										</div>
+									))}
+									{departments.length === 0 && (
+										<div className="text-center py-8 text-gray-500 text-sm">
+											No departments added yet
+										</div>
+									)}
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<div className="mt-8 p-6 bg-amber-50 border border-amber-200 rounded-lg">
+						<h3 className="font-semibold text-amber-900 mb-2">⚠️ Important Notes:</h3>
+						<ul className="list-disc list-inside space-y-1 text-amber-800 text-sm">
+							<li>Deleting a school or department is permanent and cannot be undone</li>
+							<li>Ensure no scorecards or reports reference a school/department before deleting</li>
+							<li>Changes here will immediately affect all related forms and reports</li>
+						</ul>
+					</div>
+				</div>
+				)}
 			</div>
 		</DashboardLayout>
 	);

@@ -6,6 +6,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { ArrowLeftIcon, CheckCircleIcon, TrashIcon, ArrowTrendingUpIcon, ArrowTrendingDownIcon, ArrowDownTrayIcon, PencilSquareIcon } from "@heroicons/react/24/outline";
 import * as XLSX from "xlsx";
+import { buildSchoolMatchIndex, resolveSchoolName } from "@/lib/school-matching";
 
 interface EnrollmentEnrollment {
   id: string;
@@ -35,6 +36,13 @@ export default function EnrollmentEnrollmentPage() {
   const [schools, setSchools] = useState<School[]>([]);
   const [enrollments, setEnrollments] = useState<EnrollmentEnrollment[]>([]);
   const [allEnrollments, setAllEnrollments] = useState<EnrollmentEnrollment[]>([]);
+
+  const schoolMatchIndex = useMemo(() => buildSchoolMatchIndex(schools), [schools]);
+  const getResolvedSchoolName = useCallback(
+    (rawValue: string) => resolveSchoolName(rawValue, schoolMatchIndex),
+    [schoolMatchIndex]
+  );
+  const getDisplaySchoolName = (rawValue: string) => getResolvedSchoolName(rawValue) || rawValue;
 
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -105,23 +113,18 @@ export default function EnrollmentEnrollmentPage() {
   // Initialize editing data when enrollments load - include ALL schools with data
   useEffect(() => {
     const initialData: Record<string, Record<string, number>> = {};
-    
-    // Get unique schools from enrollment data
-    const schoolsWithData = [...new Set(enrollments.map(e => e.school))];
-    
-    schoolsWithData.forEach(schoolName => {
-      const schoolEnrollments = enrollments.filter(e => e.school === schoolName);
-      // Only add school if it has enrollment data
-      if (schoolEnrollments.length > 0 && schoolEnrollments.some(e => e.count > 0)) {
-        initialData[schoolName] = {};
-        CLASSES.forEach(cls => {
-          const enrollment = schoolEnrollments.find(e => e.class === cls);
-          initialData[schoolName][cls] = enrollment?.count || 0;
-        });
+
+    enrollments.forEach((enrollment) => {
+      const resolvedName = getResolvedSchoolName(enrollment.school) || enrollment.school;
+      if (!initialData[resolvedName]) {
+        initialData[resolvedName] = {};
       }
+      const existing = initialData[resolvedName][enrollment.class] || 0;
+      initialData[resolvedName][enrollment.class] = Math.max(existing, enrollment.count || 0);
     });
+
     setEditingData(initialData);
-  }, [enrollments]);
+  }, [enrollments, getResolvedSchoolName]);
 
   const handleSaveAll = async () => {
     setLoading(true);
@@ -297,7 +300,7 @@ export default function EnrollmentEnrollmentPage() {
       const total = CLASSES.reduce((sum, cls) => sum + (schoolData[cls] || 0), 0);
       
       return {
-        School: schoolName,
+        School: getDisplaySchoolName(schoolName),
         KG1: schoolData['KG1'] || 0,
         KG2: schoolData['KG2'] || 0,
         KG3: schoolData['KG3'] || 0,
@@ -341,6 +344,10 @@ export default function EnrollmentEnrollmentPage() {
     setError(null);
 
     try {
+      if (schools.length === 0) {
+        await fetchSchools();
+      }
+
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -352,15 +359,22 @@ export default function EnrollmentEnrollmentPage() {
 
       // Parse the imported data
       const importedData: Record<string, Record<string, number>> = {};
+      const skippedSchools: string[] = [];
       
       jsonData.forEach((row: any) => {
         const schoolName = row.School || row.SCHOOL || row.school;
         if (!schoolName) return;
 
-        importedData[schoolName] = {};
+        const resolvedName = getResolvedSchoolName(schoolName);
+        if (!resolvedName) {
+          skippedSchools.push(String(schoolName));
+          return;
+        }
+
+        importedData[resolvedName] = {};
         CLASSES.forEach(cls => {
           const value = row[cls] || 0;
-          importedData[schoolName][cls] = typeof value === 'number' ? value : parseInt(value) || 0;
+          importedData[resolvedName][cls] = typeof value === 'number' ? value : parseInt(value) || 0;
         });
       });
 
@@ -402,6 +416,12 @@ export default function EnrollmentEnrollmentPage() {
 
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
+
+      if (skippedSchools.length > 0) {
+        const preview = skippedSchools.slice(0, 5).join(", ");
+        const suffix = skippedSchools.length > 5 ? "..." : "";
+        setError(`Skipped unrecognized schools: ${preview}${suffix}`);
+      }
       
     } catch (err: any) {
       console.error("Import error:", err);
@@ -756,7 +776,7 @@ export default function EnrollmentEnrollmentPage() {
                         
                         return (
                           <tr key={schoolName} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 font-semibold text-gray-900">{schoolName}</td>
+                            <td className="px-4 py-3 font-semibold text-gray-900">{getDisplaySchoolName(schoolName)}</td>
                             {CLASSES.map(cls => (
                               <td key={cls} className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">
                                 {schoolData[cls] || 0}

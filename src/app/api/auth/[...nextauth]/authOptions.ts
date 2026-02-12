@@ -58,17 +58,37 @@ export const authOptions: AuthOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
+      // On sign-in, populate token with user data
       if (user) {
         token.id = user.id;
+        token.email = user.email;
+        token.name = user.name;
         token.role = user.role;
         token.iat = Math.floor(Date.now() / 1000); // Issue time
       }
+      
+      // On update(), fetch fresh user data from database
+      if (trigger === "update" && token.id) {
+        const freshUser = await prisma.user.findUnique({
+          where: { id: token.id as string },
+          select: { id: true, name: true, email: true, role: true },
+        });
+        
+        if (freshUser) {
+          token.name = freshUser.name;
+          token.email = freshUser.email;
+          token.role = freshUser.role;
+        }
+      }
+      
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
+        session.user.email = token.email as string;
+        session.user.name = token.name as string;
         session.user.role = token.role as string;
       }
       return session;

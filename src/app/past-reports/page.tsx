@@ -115,6 +115,10 @@ export default function ArchivePage() {
   const [filterTerm, setFilterTerm] = useState<number | "all">("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -242,6 +246,22 @@ export default function ArchivePage() {
 
     return data;
   }, [viewMode, reports, scorecards, redIssues, projects, events, comments, filterYear, filterTerm, filterStatus, searchQuery]);
+
+  // Reset pagination when filters or view mode change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [viewMode, filterYear, filterTerm, filterStatus, searchQuery]);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredData.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedData = filteredData.slice(startIndex, endIndex);
+
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const exportData = () => {
     try {
@@ -453,7 +473,13 @@ export default function ArchivePage() {
             <p className="text-gray-500 text-lg">No records found</p>
           </div>
         ) : (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          <>
+            {/* Results count */}
+            <div className="mb-4 text-sm text-gray-600">
+              Showing <strong>{startIndex + 1}-{Math.min(endIndex, filteredData.length)}</strong> of <strong>{filteredData.length}</strong> record{filteredData.length !== 1 ? 's' : ''}
+            </div>
+            
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
             <div className="overflow-x-auto">
               {viewMode === "reports" && (
                 <table className="min-w-full divide-y divide-gray-200">
@@ -469,7 +495,7 @@ export default function ArchivePage() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {(filteredData as WeeklyReport[]).map((report) => (
+                    {(paginatedData as WeeklyReport[]).map((report) => (
                       <tr key={report.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                           {report.year}, Term {report.term}, Week {report.weekNumber}
@@ -509,7 +535,7 @@ export default function ArchivePage() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {(filteredData as Scorecard[]).map((sc) => {
+                    {(paginatedData as Scorecard[]).map((sc) => {
                       const avg = (sc.academicPercent + sc.financePercent + sc.qualityPercent + sc.tdpPercent + sc.theologyPercent) / 5;
                       return (
                         <tr key={sc.id} className="hover:bg-gray-50">
@@ -542,7 +568,7 @@ export default function ArchivePage() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {(filteredData as RedIssue[]).map((issue) => (
+                    {(paginatedData as RedIssue[]).map((issue) => (
                       <tr key={issue.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 text-sm font-medium text-gray-900">{issue.title}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
@@ -581,7 +607,7 @@ export default function ArchivePage() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {(filteredData as Project[]).map((project) => (
+                    {(paginatedData as Project[]).map((project) => (
                       <tr key={project.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 text-sm font-medium text-gray-900">{project.title}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{project.inCharge}</td>
@@ -619,7 +645,7 @@ export default function ArchivePage() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {(filteredData as Event[]).map((event) => (
+                    {(paginatedData as Event[]).map((event) => (
                       <tr key={event.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 text-sm font-medium text-gray-900">{event.title}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{event.inCharge}</td>
@@ -647,7 +673,7 @@ export default function ArchivePage() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {(filteredData as Comment[]).map((comment) => (
+                    {(paginatedData as Comment[]).map((comment) => (
                       <tr key={comment.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 capitalize">{comment.category}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
@@ -665,6 +691,79 @@ export default function ArchivePage() {
               )}
             </div>
           </div>
+
+          {/* Pagination Controls */}
+          {filteredData.length > itemsPerPage && (
+            <div className="mt-6 flex items-center justify-center gap-2">
+              <button
+                onClick={() => goToPage(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              
+              <div className="flex items-center gap-1">
+                {/* First page */}
+                {currentPage > 3 && (
+                  <>
+                    <button
+                      onClick={() => goToPage(1)}
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      1
+                    </button>
+                    {currentPage > 4 && <span className="px-2 text-gray-500">...</span>}
+                  </>
+                )}
+
+                {/* Page numbers around current page */}
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(page => {
+                    return page === currentPage ||
+                           page === currentPage - 1 ||
+                           page === currentPage - 2 ||
+                           page === currentPage + 1 ||
+                           page === currentPage + 2;
+                  })
+                  .map(page => (
+                    <button
+                      key={page}
+                      onClick={() => goToPage(page)}
+                      className={`px-3 py-2 border rounded-lg text-sm font-medium ${
+                        page === currentPage
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+
+                {/* Last page */}
+                {currentPage < totalPages - 2 && (
+                  <>
+                    {currentPage < totalPages - 3 && <span className="px-2 text-gray-500">...</span>}
+                    <button
+                      onClick={() => goToPage(totalPages)}
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      {totalPages}
+                    </button>
+                  </>
+                )}
+              </div>
+
+              <button
+                onClick={() => goToPage(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
+          )}
+          </>
         )}
 
         {/* Summary Statistics */}

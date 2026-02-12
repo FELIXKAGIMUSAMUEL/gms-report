@@ -218,12 +218,47 @@ export default function TheologyEnrollmentPage() {
     }
   };
 
-  const handleDeleteSchool = (schoolName: string) => {
-    setEditingData(prev => {
-      const newData = { ...prev };
-      delete newData[schoolName];
-      return newData;
-    });
+  const handleDeleteSchool = async (schoolName: string) => {
+    if (!window.confirm(`Delete all ${schoolName} theology enrollment for Term ${selectedTerm}, ${selectedYear}?`)) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Find all records for this school, term, and year from the full enrollments list
+      const toDelete = allEnrollments.filter(
+        e => e.school === schoolName && e.term === selectedTerm && e.year === selectedYear
+      );
+
+      // Delete each record from the database
+      await Promise.all(
+        toDelete.map(record =>
+          fetch(`/api/theology-enrollment?id=${record.id}`, {
+            method: "DELETE",
+          })
+        )
+      );
+
+      // Remove from local state
+      setEditingData(prev => {
+        const newData = { ...prev };
+        delete newData[schoolName];
+        return newData;
+      });
+
+      // Refresh the enrollments
+      await fetchEnrollments();
+      await fetchAllEnrollments();
+
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete enrollment data");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleEditSchool = (schoolName: string) => {

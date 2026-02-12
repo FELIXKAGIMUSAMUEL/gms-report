@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { ArrowLeftIcon, CheckCircleIcon, TrashIcon, PlusIcon } from "@heroicons/react/24/outline";
 
@@ -23,14 +23,25 @@ export default function ProjectsEntryPage() {
     projectName: "",
     projectManager: "",
     progress: 0,
-    status: "In Progress",
+    status: "ACTIVE",
   });
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [savingProjects, setSavingProjects] = useState<Set<string>>(new Set());
 
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchLoading, setFetchLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "COMPLETED">("ALL");
+  const [sortBy, setSortBy] = useState<"RECENT" | "NAME" | "PROGRESS" | "STATUS">("RECENT");
+
+  const formatStatus = (status?: string) => (status === "COMPLETED" ? "Completed" : "Active");
+
+  const statusClasses = (status?: string) =>
+    status === "COMPLETED"
+      ? "bg-green-100 text-green-800 border-green-200"
+      : "bg-blue-100 text-blue-800 border-blue-200";
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -48,7 +59,7 @@ export default function ProjectsEntryPage() {
   const fetchProjects = async () => {
     try {
       setFetchLoading(true);
-      const response = await fetch("/api/projects");
+      const response = await fetch("/api/projects?status=ALL");
       if (response.ok) {
         const data = await response.json();
         setProjects(Array.isArray(data) ? data : (data.data || []));
@@ -75,9 +86,15 @@ export default function ProjectsEntryPage() {
       }
 
       const response = await fetch("/api/projects", {
-        method: "POST",
+        method: editingProjectId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newProject),
+        body: JSON.stringify({
+          id: editingProjectId,
+          projectName: newProject.projectName,
+          projectManager: newProject.projectManager,
+          progress: newProject.progress,
+          status: newProject.status,
+        }),
       });
 
       if (!response.ok) {
@@ -90,8 +107,9 @@ export default function ProjectsEntryPage() {
         projectName: "",
         projectManager: "",
         progress: 0,
-        status: "In Progress",
+        status: "ACTIVE",
       });
+      setEditingProjectId(null);
 
       setTimeout(() => setSuccess(false), 3000);
       await fetchProjects();
@@ -101,6 +119,30 @@ export default function ProjectsEntryPage() {
       setLoading(false);
     }
   };
+
+  const filteredProjects = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    let next = projects.filter((project) => {
+      const matchesQuery =
+        !query ||
+        project.projectName.toLowerCase().includes(query) ||
+        project.projectManager.toLowerCase().includes(query);
+      const matchesStatus = statusFilter === "ALL" || project.status === statusFilter;
+      return matchesQuery && matchesStatus;
+    });
+
+    if (sortBy === "NAME") {
+      next = [...next].sort((a, b) => a.projectName.localeCompare(b.projectName));
+    } else if (sortBy === "PROGRESS") {
+      next = [...next].sort((a, b) => b.progress - a.progress);
+    } else if (sortBy === "STATUS") {
+      next = [...next].sort((a, b) => (a.status || "").localeCompare(b.status || ""));
+    } else {
+      next = [...next];
+    }
+
+    return next;
+  }, [projects, searchQuery, statusFilter, sortBy]);
 
   const handleUpdateProgress = async (projectId: string, newProgress: number) => {
     // Update UI immediately (optimistic update)
@@ -206,7 +248,9 @@ export default function ProjectsEntryPage() {
 
         {/* Add New Project Form */}
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-8">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Add New Project</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            {editingProjectId ? "Update Project" : "Add New Project"}
+          </h3>
           <form onSubmit={handleAddProject} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
@@ -251,53 +295,114 @@ export default function ProjectsEntryPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
                 <select
-                  value={newProject.status || "In Progress"}
+                  value={newProject.status || "ACTIVE"}
                   onChange={(e) => setNewProject(prev => ({ ...prev, status: e.target.value }))}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 font-medium"
                 >
-                  <option value="Not Started">Not Started</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="On Hold">On Hold</option>
-                  <option value="Completed">Completed</option>
+                  <option value="ACTIVE">Active</option>
+                  <option value="COMPLETED">Completed</option>
                 </select>
               </div>
             </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 font-medium transition-colors flex items-center justify-center gap-2"
-            >
-              <PlusIcon className="w-5 h-5" />
-              {loading ? "Adding..." : "Add Project"}
-            </button>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex-1 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 font-medium transition-colors flex items-center justify-center gap-2"
+              >
+                <PlusIcon className="w-5 h-5" />
+                {loading ? "Saving..." : editingProjectId ? "Update Project" : "Add Project"}
+              </button>
+              {editingProjectId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingProjectId(null);
+                    setNewProject({ projectName: "", projectManager: "", progress: 0, status: "ACTIVE" });
+                  }}
+                  className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+                >
+                  Cancel Edit
+                </button>
+              )}
+            </div>
           </form>
         </div>
 
         {/* Projects List */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200">
           <div className="px-6 py-4 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">Projects ({projects.length})</h3>
+            <h3 className="text-lg font-semibold text-gray-900">Projects ({filteredProjects.length})</h3>
+            <div className="mt-3 flex flex-col lg:flex-row gap-3">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by project or manager"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white text-gray-900"
+              />
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as "ALL" | "ACTIVE" | "COMPLETED")}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white text-gray-900"
+              >
+                <option value="ALL">All Statuses</option>
+                <option value="ACTIVE">Active</option>
+                <option value="COMPLETED">Completed</option>
+              </select>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as "RECENT" | "NAME" | "PROGRESS" | "STATUS")}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white text-gray-900"
+              >
+                <option value="RECENT">Sort: Recent</option>
+                <option value="NAME">Sort: Name</option>
+                <option value="PROGRESS">Sort: Progress</option>
+                <option value="STATUS">Sort: Status</option>
+              </select>
+            </div>
           </div>
-          {projects.length === 0 ? (
+          {filteredProjects.length === 0 ? (
             <div className="px-6 py-12 text-center">
               <p className="text-gray-500">No projects added yet</p>
             </div>
           ) : (
             <div className="divide-y divide-gray-200">
-              {projects.map((project) => (
+              {filteredProjects.map((project) => (
                 <div key={project.id} className="px-6 py-6 hover:bg-gray-50 transition-colors">
                   <div className="flex items-start justify-between gap-4 mb-4">
                     <div className="flex-1">
                       <h4 className="font-semibold text-gray-900 text-lg">{project.projectName}</h4>
                       <p className="text-sm text-gray-600 mt-1">Manager: <span className="font-medium">{project.projectManager}</span></p>
+                      <span className={`inline-flex items-center px-2.5 py-1 mt-2 text-xs font-semibold rounded-full border ${statusClasses(project.status)}`}>
+                        {formatStatus(project.status)}
+                      </span>
                     </div>
-                    <button
-                      onClick={() => handleDeleteProject(project.id)}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      title="Delete project"
-                    >
-                      <TrashIcon className="w-5 h-5" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setEditingProjectId(project.id);
+                          setNewProject({
+                            projectName: project.projectName,
+                            projectManager: project.projectManager,
+                            progress: project.progress,
+                            status: project.status || "ACTIVE",
+                          });
+                          window.scrollTo({ top: 0, behavior: "smooth" });
+                        }}
+                        className="px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+                        title="Edit project"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteProject(project.id)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Delete project"
+                      >
+                        <TrashIcon className="w-5 h-5" />
+                      </button>
+                    </div>
                   </div>
                   
                   {/* Progress Bar */}
@@ -335,7 +440,7 @@ export default function ProjectsEntryPage() {
                       disabled={savingProjects.has(project.id)}
                     />
                     <div className="px-3 py-2 bg-gray-100 rounded text-sm font-medium text-gray-700 min-w-fit">
-                      {project.status || "In Progress"}
+                      {formatStatus(project.status)}
                     </div>
                   </div>
                 </div>
@@ -364,28 +469,29 @@ export default function ProjectsEntryPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {projects.map(p => (
+                  {filteredProjects.map(p => (
                     <tr key={p.id} className="hover:bg-gray-50">
                       <td className="px-3 py-2 text-sm text-gray-800">{p.projectName}</td>
                       <td className="px-3 py-2 text-sm text-gray-800">{p.projectManager}</td>
                       <td className="px-3 py-2 text-sm text-gray-800">{p.progress}%</td>
-                      <td className="px-3 py-2 text-sm text-gray-800">{p.status}</td>
+                      <td className="px-3 py-2 text-sm text-gray-800">{formatStatus(p.status)}</td>
                       <td className="px-3 py-2 text-sm">
                         <div className="flex gap-2">
                           <button
                             type="button"
                             onClick={() => {
+                              setEditingProjectId(p.id);
                               setNewProject({
                                 projectName: p.projectName,
                                 projectManager: p.projectManager,
                                 progress: p.progress,
-                                status: p.status,
+                                status: p.status || "ACTIVE",
                               });
-                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                              window.scrollTo({ top: 0, behavior: "smooth" });
                             }}
                             className="px-3 py-1 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
                           >
-                            Load
+                            Edit
                           </button>
                           <button
                             type="button"

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { ArrowLeftIcon, CheckCircleIcon, PencilSquareIcon, TrashIcon, ArrowDownTrayIcon } from "@heroicons/react/24/outline";
 import * as XLSX from "xlsx";
+import { buildSchoolMatchIndex, resolveSchoolName } from "@/lib/school-matching";
 
 interface P6PromotionResult {
   id: string;
@@ -45,10 +46,17 @@ export default function P6PromotionEntryPage() {
   const [results, setResults] = useState<P6PromotionResult[]>([]);
   const [editingData, setEditingData] = useState<Record<string, P6PromotionResult>>({});
 
+  const schoolMatchIndex = useMemo(() => buildSchoolMatchIndex(schools), [schools]);
+  const getResolvedSchoolName = (rawValue: string) => resolveSchoolName(rawValue, schoolMatchIndex);
+  const getDisplaySchoolName = (rawValue: string) => getResolvedSchoolName(rawValue) || rawValue;
+
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchLoading, setFetchLoading] = useState(true);
+  
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 15;
 
   const [selectedSchool, setSelectedSchool] = useState<string>("");
   const [currentEntryData, setCurrentEntryData] = useState({
@@ -293,6 +301,10 @@ export default function P6PromotionEntryPage() {
     setError(null);
 
     try {
+      if (schools.length === 0) {
+        await fetchSchools();
+      }
+
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -304,16 +316,24 @@ export default function P6PromotionEntryPage() {
 
       let savedCount = 0;
       let failedCount = 0;
+      const skippedSchools: string[] = [];
 
       for (const row of jsonData as any[]) {
         const school = row.School || row.SCHOOL || row.school;
         if (!school) continue;
 
+        const resolvedName = getResolvedSchoolName(school);
+        if (!resolvedName) {
+          skippedSchools.push(String(school));
+          failedCount++;
+          continue;
+        }
+
         const year = Number.parseInt(row.Year ?? row.YEAR ?? selectedYear, 10) || selectedYear;
         const setNumber = Number.parseInt(row.Set ?? row.SET ?? selectedSet, 10) || selectedSet;
 
         const payload = {
-          school,
+          school: resolvedName,
           year,
           setNumber,
           popn: Number.parseInt(row.POPN ?? row.Popn ?? row.popn ?? 0, 10) || 0,
@@ -349,7 +369,10 @@ export default function P6PromotionEntryPage() {
         setSuccess(true);
         setTimeout(() => setSuccess(false), 3000);
       } else {
-        setError(`Imported ${savedCount} rows, but ${failedCount} failed`);
+        const preview = skippedSchools.slice(0, 5).join(", ");
+        const suffix = skippedSchools.length > 5 ? "..." : "";
+        const skippedMsg = skippedSchools.length > 0 ? ` Skipped: ${preview}${suffix}` : "";
+        setError(`Imported ${savedCount} rows, but ${failedCount} failed.${skippedMsg}`);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to import data");
@@ -361,7 +384,7 @@ export default function P6PromotionEntryPage() {
 
   const handleExportToExcel = () => {
     const rows = results.map((record) => ({
-      School: record.school,
+      School: getDisplaySchoolName(record.school),
       Year: record.year,
       Set: record.setNumber,
       POPN: record.popn,
@@ -392,6 +415,22 @@ export default function P6PromotionEntryPage() {
     () => results.slice().sort((a, b) => a.school.localeCompare(b.school)),
     [results]
   );
+
+  // Reset pagination when year or set changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedYear, selectedSet]);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(sortedResults.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedResults = sortedResults.slice(startIndex, endIndex);
+
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   if (status === "loading") {
     return (
@@ -633,7 +672,15 @@ export default function P6PromotionEntryPage() {
               <h2 className="text-xl font-semibold text-gray-900">Entries for {selectedYear} — Set {selectedSet}</h2>
               <p className="text-sm text-gray-600">Division percentages use Actual POPN.</p>
             </div>
-            {fetchLoading && <span className="text-sm text-gray-500">Loading...</span>}
+            <div className="text-right">
+              {fetchLoading ? (
+                <span className="text-sm text-gray-500">Loading...</span>
+              ) : sortedResults.length > 0 && (
+                <div className="text-sm text-gray-600">
+                  Showing <strong>{startIndex + 1}-{Math.min(endIndex, sortedResults.length)}</strong> of <strong>{sortedResults.length}</strong>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -659,7 +706,7 @@ export default function P6PromotionEntryPage() {
               <tbody className="divide-y divide-gray-200">
                 {sortedResults.map((record) => (
                   <tr key={record.id} className="hover:bg-gray-50">
-                    <td className="px-3 py-3 font-semibold text-gray-900">{record.school}</td>
+                    <td className="px-3 py-3 font-semibold text-gray-900">{getDisplaySchoolName(record.school)}</td>
                     <td className="px-3 py-3 text-gray-700">{record.popn}</td>
                     <td className="px-3 py-3 text-gray-700">{record.absences}</td>
                     <td className="px-3 py-3 text-gray-700">{record.actualPopn}</td>
@@ -688,7 +735,7 @@ export default function P6PromotionEntryPage() {
                     </td>
                   </tr>
                 ))}
-                {sortedResults.length === 0 && (
+                {paginatedResults.length === 0 && (
                   <tr>
                     <td colSpan={14} className="px-3 py-6 text-center text-gray-500">
                       No records for this year and set yet.
@@ -698,6 +745,75 @@ export default function P6PromotionEntryPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {sortedResults.length > itemsPerPage && (
+            <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-center gap-2">
+              <button
+                onClick={() => goToPage(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              
+              <div className="flex items-center gap-1">
+                {currentPage > 3 && (
+                  <>
+                    <button
+                      onClick={() => goToPage(1)}
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      1
+                    </button>
+                    {currentPage > 4 && <span className="px-2 text-gray-500">...</span>}
+                  </>
+                )}
+
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(page => {
+                    return page === currentPage ||
+                           page === currentPage - 1 ||
+                           page === currentPage - 2 ||
+                           page === currentPage + 1 ||
+                           page === currentPage + 2;
+                  })
+                  .map(page => (
+                    <button
+                      key={page}
+                      onClick={() => goToPage(page)}
+                      className={`px-3 py-2 border rounded-lg text-sm font-medium ${
+                        page === currentPage
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+
+                {currentPage < totalPages - 2 && (
+                  <>
+                    {currentPage < totalPages - 3 && <span className="px-2 text-gray-500">...</span>}
+                    <button
+                      onClick={() => goToPage(totalPages)}
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      {totalPages}
+                    </button>
+                  </>
+                )}
+              </div>
+
+              <button
+                onClick={() => goToPage(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </DashboardLayout>

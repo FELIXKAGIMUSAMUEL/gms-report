@@ -1,3 +1,9 @@
+/**
+ * GMS Report System - Root Layout
+ * Copyright (c) 2026 Mustafa - Sir Apollo Kaggwa Schools
+ * All rights reserved.
+ */
+
 import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "./providers";

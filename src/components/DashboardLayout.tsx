@@ -1,3 +1,9 @@
+/**
+ * GMS Report System - Dashboard Layout Component
+ * Copyright (c) 2026 Mustafa - Sir Apollo Kaggwa Schools
+ * All rights reserved.
+ */
+
 "use client";
 
 import { useSession, signOut } from "next-auth/react";
@@ -78,11 +84,12 @@ export default function DashboardLayout({
   const portalTitle = userRole === "TRUSTEE" ? "Trustee Portal" : "GM Report Portal";
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const isP7EntryPath = pathname === "/p7-entry" || pathname.startsWith("/p7-prep");
-  const [updateReportOpen, setUpdateReportOpen] = useState(pathname.includes("-entry") && !isP7EntryPath);
+  const [updateReportOpen, setUpdateReportOpen] = useState((pathname.includes("-entry") || pathname === "/gm-weekly-report" || pathname === "/trustee-financial") && !isP7EntryPath && !pathname.includes("scorecard"));
   const [enrollmentOpen, setEnrollmentOpen] = useState(pathname.includes("enrollment") && !pathname.includes("theology"));
   const [theologyOpen, setTheologyOpen] = useState(pathname.includes("theology"));
   const [p7prepOpen, setP7PrepOpen] = useState(isP7EntryPath);
   const [trusteeHubOpen, setTrusteeHubOpen] = useState(pathname.includes("trustee-"));
+  const [scorecardOpen, setScorecarOpen] = useState(pathname.includes("scorecard"));
   const [messagingOpen, setMessagingOpen] = useState(false);
   const [unreadMessages, setUnreadMessages] = useState(0);
 
@@ -168,7 +175,8 @@ export default function DashboardLayout({
 
   const navigation = [
     { name: "Dashboard", href: "/dashboard", icon: HomeIcon, show: true },
-    { name: "Enter Data", href: "#", icon: DocumentPlusIcon, show: isGM, isDropdown: true, dropdownKey: "updateReport" },
+    { name: "Submissions", href: "#", icon: DocumentPlusIcon, show: isGM, isDropdown: true, dropdownKey: "updateReport" },
+    { name: "Scorecard", href: "#", icon: ChartPieIcon, show: isGM || isTrustee, isDropdown: true, dropdownKey: "scorecard" },
     { name: "Schools Enrollment", href: "#", icon: UserGroupIcon, show: true, isDropdown: true, dropdownKey: "enrollment" },
     { name: "Theology Enrollment", href: "#", icon: AcademicCapIcon, show: true, isDropdown: true, dropdownKey: "theology" },
     { name: "P.7 Prep & PLE", href: "#", icon: AcademicCapIcon, show: true, isDropdown: true, dropdownKey: "p7prep" },
@@ -184,7 +192,17 @@ export default function DashboardLayout({
     { name: "Events Management", href: "/events-entry", icon: CalendarIcon },
     { name: "Projects Management", href: "/projects-entry", icon: RocketLaunchIcon },
     { name: "Issues Management", href: "/issues-entry", icon: ExclamationTriangleIcon },
-    { name: "Scorecard Entry", href: "/scorecard-entry", icon: ChartPieIcon },
+    { name: "Income and Expenditure", href: "/financial-entry", icon: CurrencyDollarIcon },
+    { name: "Budget Entry", href: "/budget-entry", icon: CurrencyDollarIcon },
+    { name: "Financial Overview", href: "/trustee-financial", icon: ChartBarIcon },
+    { name: "Weekly Report", href: "/gm-weekly-report", icon: DocumentPlusIcon },
+  ];
+
+  const scorecardSections = isGM ? [
+    { name: "Scorecard Entry", href: "/scorecard-entry", icon: DocumentPlusIcon },
+    { name: "Scorecard Analysis", href: "/scorecard-analysis", icon: ChartBarIcon },
+  ] : [
+    { name: "Scorecard Analysis", href: "/scorecard-analysis", icon: ChartBarIcon },
   ];
 
   // Theology sections - showing only entry for GM, only analysis for Trustee
@@ -216,12 +234,10 @@ export default function DashboardLayout({
   // Trustee Hub sections
   const trusteeHubSections = [
     { name: "Executive Dashboard", href: "/trustee-dashboard", icon: ChartBarIcon, description: "High-level overview and key metrics" },
-    { name: "School Performance Scorecard", href: "/trustee-scorecard", icon: SparklesIcon, description: "Rankings and school-by-school analysis" },
     { name: "Financial Overview", href: "/trustee-financial", icon: CurrencyDollarIcon, description: "Consolidated financial view and cash flows" },
     { name: "Board Meeting Reports", href: "/trustee-board-reports", icon: DocumentPlusIcon, description: "Generate formatted reports for board meetings" },
     { name: "Comparative Analysis", href: "/trustee-analysis", icon: ChartBarIcon, description: "School vs school comparisons and benchmarking" },
     { name: "Goals & Targets", href: "/trustee-goals", icon: RocketLaunchIcon, description: "Organizational goals and progress tracking" },
-    { name: "Issues Dashboard", href: "/trustee-issues", icon: ExclamationTriangleIcon, description: "Critical issues and action items" },
     { name: "Export Center", href: "/trustee-export", icon: DocumentPlusIcon, description: "Bulk export and custom reports" },
   ];
 
@@ -374,14 +390,17 @@ export default function DashboardLayout({
                           setP7PrepOpen(!p7prepOpen);
                         } else if (item.dropdownKey === "trusteeHub") {
                           setTrusteeHubOpen(!trusteeHubOpen);
+                        } else if (item.dropdownKey === "scorecard") {
+                          setScorecarOpen(!scorecardOpen);
                         }
                       }}
                       className={`w-full group flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                        (item.dropdownKey === "updateReport" && pathname.includes("-entry") && !isP7EntryPath) ||
+                        (item.dropdownKey === "updateReport" && pathname.includes("-entry") && !isP7EntryPath && !pathname.includes("scorecard")) ||
                         (item.dropdownKey === "enrollment" && pathname.includes("enrollment") && !pathname.includes("theology")) ||
                         (item.dropdownKey === "theology" && pathname.includes("theology")) ||
                         (item.dropdownKey === "p7prep" && isP7EntryPath) ||
-                        (item.dropdownKey === "trusteeHub" && pathname.includes("trustee-"))
+                        (item.dropdownKey === "trusteeHub" && pathname.includes("trustee-")) ||
+                        (item.dropdownKey === "scorecard" && pathname.includes("scorecard"))
                           ? "bg-blue-50 text-blue-700"
                           : "text-gray-700 hover:bg-gray-100"
                       }`}
@@ -394,7 +413,8 @@ export default function DashboardLayout({
                         (item.dropdownKey === "enrollment" && enrollmentOpen) ||
                         (item.dropdownKey === "theology" && theologyOpen) ||
                         (item.dropdownKey === "p7prep" && p7prepOpen) ||
-                        (item.dropdownKey === "trusteeHub" && trusteeHubOpen)) ? (
+                        (item.dropdownKey === "trusteeHub" && trusteeHubOpen) ||
+                        (item.dropdownKey === "scorecard" && scorecardOpen)) ? (
                         <ChevronUpIcon className="h-4 w-4" />
                       ) : (
                         <ChevronDownIcon className="h-4 w-4" />
@@ -480,6 +500,22 @@ export default function DashboardLayout({
                         ))}
                       </div>
                     )}
+
+                    {item.dropdownKey === "scorecard" && scorecardOpen && (
+                      <div className="ml-8 space-y-1">
+                        {scorecardSections.map((section) => (
+                          <Link
+                            key={section.name}
+                            href={section.href}
+                            onClick={() => setSidebarOpen(false)}
+                            className="group flex items-center px-3 py-2 text-sm font-medium rounded-lg text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+                          >
+                            <section.icon className="mr-2 h-4 w-4" />
+                            {section.name}
+                          </Link>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <Link
@@ -554,25 +590,29 @@ export default function DashboardLayout({
                               setP7PrepOpen(!p7prepOpen);
                             } else if (item.dropdownKey === "trusteeHub") {
                               setTrusteeHubOpen(!trusteeHubOpen);
+                            } else if (item.dropdownKey === "scorecard") {
+                              setScorecarOpen(!scorecardOpen);
                             }
                           }}
                           className={`w-full group flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
-                            (item.dropdownKey === "updateReport" && pathname.includes("-entry") && !isP7EntryPath) ||
+                            (item.dropdownKey === "updateReport" && pathname.includes("-entry") && !isP7EntryPath && !pathname.includes("scorecard")) ||
                             (item.dropdownKey === "enrollment" && pathname.includes("enrollment") && !pathname.includes("theology")) ||
                             (item.dropdownKey === "theology" && pathname.includes("theology")) ||
                             (item.dropdownKey === "p7prep" && isP7EntryPath) ||
-                            (item.dropdownKey === "trusteeHub" && pathname.includes("trustee-"))
+                            (item.dropdownKey === "trusteeHub" && pathname.includes("trustee-")) ||
+                            (item.dropdownKey === "scorecard" && pathname.includes("scorecard"))
                               ? "bg-blue-50 text-blue-700 shadow-sm"
                               : "text-gray-700 hover:bg-gray-50 hover:text-blue-600"
                           }`}
                         >
                           <div className="flex items-center">
                             <item.icon className={`mr-3 h-5 w-5 ${
-                              (item.dropdownKey === "updateReport" && pathname.includes("-entry") && !isP7EntryPath) ||
+                              (item.dropdownKey === "updateReport" && pathname.includes("-entry") && !isP7EntryPath && !pathname.includes("scorecard")) ||
                               (item.dropdownKey === "enrollment" && pathname.includes("enrollment") && !pathname.includes("theology")) ||
                               (item.dropdownKey === "theology" && pathname.includes("theology")) ||
                               (item.dropdownKey === "p7prep" && isP7EntryPath) ||
-                              (item.dropdownKey === "trusteeHub" && pathname.includes("trustee-"))
+                              (item.dropdownKey === "trusteeHub" && pathname.includes("trustee-")) ||
+                              (item.dropdownKey === "scorecard" && pathname.includes("scorecard"))
                                 ? "text-blue-600" 
                                 : "text-gray-400"
                             }`} />
@@ -582,7 +622,8 @@ export default function DashboardLayout({
                             (item.dropdownKey === "enrollment" && enrollmentOpen) ||
                             (item.dropdownKey === "theology" && theologyOpen) ||
                             (item.dropdownKey === "p7prep" && p7prepOpen) ||
-                            (item.dropdownKey === "trusteeHub" && trusteeHubOpen)) ? (
+                            (item.dropdownKey === "trusteeHub" && trusteeHubOpen) ||
+                            (item.dropdownKey === "scorecard" && scorecardOpen)) ? (
                             <ChevronUpIcon className="h-4 w-4" />
                           ) : (
                             <ChevronDownIcon className="h-4 w-4" />
@@ -659,6 +700,21 @@ export default function DashboardLayout({
                               >
                                 <section.icon className="mr-2 h-4 w-4" />
                                 <span className="text-xs">{section.name}</span>
+                              </Link>
+                            ))}
+                          </div>
+                        )}
+
+                        {item.dropdownKey === "scorecard" && scorecardOpen && (
+                          <div className="ml-8 space-y-1 mt-1">
+                            {scorecardSections.map((section) => (
+                              <Link
+                                key={section.name}
+                                href={section.href}
+                                className="group flex items-center px-3 py-2 text-sm font-medium rounded-lg text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+                              >
+                                <section.icon className="mr-2 h-4 w-4" />
+                                {section.name}
                               </Link>
                             ))}
                           </div>

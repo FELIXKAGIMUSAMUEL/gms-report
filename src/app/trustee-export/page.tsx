@@ -4,15 +4,26 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
-import { ArrowDownTrayIcon } from "@heroicons/react/24/outline";
-import * as XLSX from "xlsx";
+import { 
+  ArrowDownTrayIcon,
+  DocumentIcon,
+  UsersIcon,
+  AcademicCapIcon,
+  CurrencyDollarIcon,
+  ChartBarIcon,
+  ChatBubbleLeftIcon,
+  DocumentTextIcon,
+  ClockIcon,
+  BellIcon,
+} from "@heroicons/react/24/outline";
 
 interface ExportFormat {
   name: string;
-  icon: string;
+  icon: any;
   description: string;
   format: "excel" | "csv" | "pdf";
   category: string;
+  apiType: string;
 }
 
 export default function ExportCenterPage() {
@@ -29,74 +40,85 @@ export default function ExportCenterPage() {
   const exportOptions: ExportFormat[] = [
     {
       name: "All Weekly Reports",
-      icon: "📋",
-      description: "Export all weekly reports in Excel format",
-      format: "excel",
+      icon: DocumentIcon,
+      description: "Export all weekly reports in CSV format",
+      format: "csv",
       category: "Reports",
+      apiType: "all-weekly-reports",
     },
     {
       name: "Enrollment Data",
-      icon: "👥",
+      icon: UsersIcon,
       description: "Export enrollment trends by school and term",
-      format: "excel",
+      format: "csv",
       category: "Data",
+      apiType: "enrollment-data",
     },
     {
       name: "P.7 Prep Results",
-      icon: "📊",
+      icon: AcademicCapIcon,
       description: "Export P.7 exam results and rankings",
-      format: "excel",
+      format: "csv",
       category: "Data",
+      apiType: "enrollment-data",
     },
     {
       name: "Financial Summary",
-      icon: "💰",
+      icon: CurrencyDollarIcon,
       description: "Export fees collection and expenditure data",
-      format: "excel",
+      format: "csv",
       category: "Financial",
+      apiType: "financial-summary",
     },
     {
       name: "School Scorecard",
-      icon: "🎯",
+      icon: ChartBarIcon,
       description: "Export comprehensive school performance scorecard",
-      format: "excel",
+      format: "csv",
       category: "Analytics",
+      apiType: "all-weekly-reports",
     },
     {
-      name: "Issues & Action Items",
-      icon: "🚨",
+      name: "Issues & Actions",
+      icon: BellIcon,
       description: "Export all open issues with status and timeline",
-      format: "excel",
+      format: "csv",
       category: "Issues",
+      apiType: "all-weekly-reports",
     },
     {
-      name: "Comments Report (CSV)",
-      icon: "💬",
+      name: "Comments Report",
+      icon: ChatBubbleLeftIcon,
       description: "Export all comments in CSV format",
       format: "csv",
       category: "Comments",
+      apiType: "all-weekly-reports",
     },
     {
-      name: "Monthly Digest PDF",
-      icon: "📄",
-      description: "Generate printable monthly summary report",
-      format: "pdf",
-      category: "Reports",
+      name: "Budget Data",
+      icon: CurrencyDollarIcon,
+      description: "Export budget allocations and spending",
+      format: "csv",
+      category: "Financial",
+      apiType: "budget-data",
     },
   ];
 
-  const handleExport = async (exportType: string) => {
+  const handleExport = async (option: ExportFormat) => {
     try {
       setExporting(true);
 
-      const response = await fetch(`/api/trustee/export?type=${exportType}`);
+      const response = await fetch(`/api/trustee/export?type=${option.apiType}`);
       if (!response.ok) throw new Error("Export failed");
 
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${exportType}-${new Date().toISOString().split("T")[0]}.xlsx`;
+      a.download = response.headers
+        .get("content-disposition")
+        ?.split("filename=")[1]
+        .replace(/"/g, "") || `${option.name.replace(/\s+/g, "-").toLowerCase()}-${new Date().toISOString().split("T")[0]}.csv`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -146,24 +168,30 @@ export default function ExportCenterPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {exportOptions
                 .filter((opt) => opt.category === category)
-                .map((option) => (
-                  <div
-                    key={option.name}
-                    className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow"
-                  >
-                    <div className="text-4xl mb-3">{option.icon}</div>
-                    <h3 className="font-semibold text-gray-900 text-sm mb-2">{option.name}</h3>
-                    <p className="text-xs text-gray-600 mb-4">{option.description}</p>
-                    <button
-                      onClick={() => handleExport(option.name.replace(/\s+/g, "-").toLowerCase())}
-                      disabled={exporting}
-                      className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-semibold text-sm transition-colors"
+                .map((option) => {
+                  const IconComponent = option.icon;
+                  return (
+                    <div
+                      key={option.name}
+                      className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow"
                     >
-                      <ArrowDownTrayIcon className="w-4 h-4" />
-                      Download
-                    </button>
-                  </div>
-                ))}
+                      <div className="mb-3">
+                        <IconComponent className="w-8 h-8 text-blue-600" />
+                      </div>
+                      <h3 className="font-semibold text-gray-900 text-sm mb-2">{option.name}</h3>
+                      <p className="text-xs text-gray-600 mb-4">{option.description}</p>
+                      <button
+                        onClick={() => handleExport(option)}
+                        disabled={exporting}
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-semibold text-sm transition-colors"
+                      >
+                        <ArrowDownTrayIcon className="w-4 h-4" />
+                        Download
+                      </button>
+                    </div>
+                  );
+                })
+            }
             </div>
           </div>
         ))}

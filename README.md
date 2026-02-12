@@ -242,4 +242,13 @@ NEXTAUTH_URL="https://your-domain.com"
 
 ---
 
+## 📄 License & Copyright
+
+**© 2026 Mustafa - Sir Apollo Kaggwa Schools. All rights reserved.**
+
+This software is proprietary and confidential. Unauthorized copying, distribution, 
+or use of this software, via any medium, is strictly prohibited.
+
+---
+
 **Built with ❤️ for executive-level reporting**

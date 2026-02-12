@@ -3,19 +3,36 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Extract query parameters
+    const { searchParams } = new URL(request.url);
+    const yearParam = searchParams.get("year");
+    const termParam = searchParams.get("term");
+
+    // Build where clause with optional filters
+    const where: any = {
+      isDraft: false,
+    };
+
+    if (yearParam) {
+      where.year = parseInt(yearParam);
+    }
+
+    if (termParam) {
+      where.term = parseInt(termParam);
+    }
+
     const reports = await prisma.weeklyReport.findMany({
-      where: {
-        isDraft: false,
-      },
+      where,
       orderBy: [
         { year: "asc" },
+        { term: "asc" },
         { weekNumber: "asc" },
       ],
     });

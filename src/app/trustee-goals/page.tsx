@@ -4,7 +4,19 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
-import { CheckCircleIcon, XCircleIcon, ClockIcon, RocketLaunchIcon } from "@heroicons/react/24/outline";
+import { 
+  CheckCircleIcon, 
+  XCircleIcon, 
+  ClockIcon, 
+  RocketLaunchIcon,
+  UsersIcon,
+  CurrencyDollarIcon,
+  AcademicCapIcon,
+  SquaresPlusIcon,
+  PlusIcon,
+  TrashIcon,
+  PencilIcon,
+} from "@heroicons/react/24/outline";
 
 interface Goal {
   id: string;
@@ -34,6 +46,12 @@ export default function TrusteeGoalsPage() {
     unit: "",
   });
   const [showForm, setShowForm] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [formSuccess, setFormSuccess] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 12;
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -47,6 +65,21 @@ export default function TrusteeGoalsPage() {
   useEffect(() => {
     fetchGoals();
   }, [selectedYear]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedYear]);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(goals.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedGoals = goals.slice(startIndex, endIndex);
+
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const fetchGoals = async () => {
     try {
@@ -64,7 +97,25 @@ export default function TrusteeGoalsPage() {
   };
 
   const createGoal = async () => {
+    setFormError("");
+    setFormSuccess("");
+
+    // Validation
+    if (!newGoal.title.trim()) {
+      setFormError("Goal title is required");
+      return;
+    }
+    if (newGoal.targetValue <= 0) {
+      setFormError("Target value must be greater than 0");
+      return;
+    }
+    if (!newGoal.unit.trim()) {
+      setFormError("Unit is required (e.g., %, students, Ugx)");
+      return;
+    }
+
     try {
+      setSubmitting(true);
       const response = await fetch("/api/goals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -76,13 +127,22 @@ export default function TrusteeGoalsPage() {
         }),
       });
 
+      const data = await response.json();
+
       if (response.ok) {
+        setFormSuccess("Goal created successfully!");
         setNewGoal({ title: "", description: "", category: "enrollment", targetValue: 0, unit: "" });
         setShowForm(false);
+        await new Promise(resolve => setTimeout(resolve, 800));
         fetchGoals();
+      } else {
+        setFormError(data.error || "Failed to create goal");
       }
     } catch (error) {
       console.error("Error creating goal:", error);
+      setFormError("Error creating goal. Please try again.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -99,11 +159,11 @@ export default function TrusteeGoalsPage() {
     }
   };
 
-  const categoryIcons: Record<string, string> = {
-    enrollment: "👥",
-    financial: "💰",
-    academic: "📚",
-    infrastructure: "🏗️",
+  const categoryIcons: Record<string, any> = {
+    enrollment: UsersIcon,
+    financial: CurrencyDollarIcon,
+    academic: AcademicCapIcon,
+    infrastructure: SquaresPlusIcon,
   };
 
   return (
@@ -118,11 +178,11 @@ export default function TrusteeGoalsPage() {
         {/* Controls */}
         <div className="flex flex-col sm:flex-row gap-4 mb-6 items-center justify-between">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
+            <label className="block text-sm font-bold text-gray-900 mb-2">Academic Year</label>
             <select
               value={selectedYear}
               onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-gray-900 font-bold bg-white"
             >
               {[2024, 2025, 2026].map((year) => (
                 <option key={year} value={year}>{year}</option>
@@ -131,67 +191,114 @@ export default function TrusteeGoalsPage() {
           </div>
           <button
             onClick={() => setShowForm(!showForm)}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold transition-colors flex items-center gap-2"
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold transition-colors flex items-center gap-2 self-end"
           >
-            <RocketLaunchIcon className="w-5 h-5" />
-            Add New Goal
+            <PlusIcon className="w-5 h-5" />
+            Create New Goal
           </button>
         </div>
 
         {/* New Goal Form */}
         {showForm && (
-          <div className="bg-white rounded-lg shadow p-6 mb-8">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">Create New Goal</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <input
-                type="text"
-                placeholder="Goal title"
-                value={newGoal.title}
-                onChange={(e) => setNewGoal({ ...newGoal, title: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-              <select
-                value={newGoal.category}
-                onChange={(e) => setNewGoal({ ...newGoal, category: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="enrollment">Enrollment</option>
-                <option value="financial">Financial</option>
-                <option value="academic">Academic</option>
-                <option value="infrastructure">Infrastructure</option>
-              </select>
-              <input
-                type="number"
-                placeholder="Target value"
-                value={newGoal.targetValue}
-                onChange={(e) => setNewGoal({ ...newGoal, targetValue: parseFloat(e.target.value) })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-              <input
-                type="text"
-                placeholder="Unit (%, students, Ugx, etc.)"
-                value={newGoal.unit}
-                onChange={(e) => setNewGoal({ ...newGoal, unit: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-              <textarea
-                placeholder="Description (optional)"
-                value={newGoal.description}
-                onChange={(e) => setNewGoal({ ...newGoal, description: e.target.value })}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 md:col-span-2"
-                rows={3}
-              />
+          <div className="bg-white rounded-lg shadow-lg border-2 border-blue-200 p-8 mb-8">
+            <h2 className="text-xl font-bold text-gray-900 mb-6">Create New Goal</h2>
+
+            {/* Error Message */}
+            {formError && (
+              <div className="mb-4 p-4 bg-red-50 border border-red-300 rounded-lg">
+                <p className="text-red-800 font-semibold text-sm">{formError}</p>
+              </div>
+            )}
+
+            {/* Success Message */}
+            {formSuccess && (
+              <div className="mb-4 p-4 bg-green-50 border border-green-300 rounded-lg">
+                <p className="text-green-800 font-semibold text-sm">{formSuccess}</p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Goal Title */}
+              <div>
+                <label className="block text-sm font-bold text-gray-900 mb-2">Goal Title *</label>
+                <input
+                  type="text"
+                  placeholder="e.g., Increase enrollment to 500 students"
+                  value={newGoal.title}
+                  onChange={(e) => setNewGoal({ ...newGoal, title: e.target.value })}
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-gray-900 placeholder-gray-400 font-medium"
+                />
+              </div>
+
+              {/* Category */}
+              <div>
+                <label className="block text-sm font-bold text-gray-900 mb-2">Category *</label>
+                <select
+                  value={newGoal.category}
+                  onChange={(e) => setNewGoal({ ...newGoal, category: e.target.value })}
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-gray-900 font-medium bg-white"
+                >
+                  <option value="enrollment">Enrollment</option>
+                  <option value="financial">Financial</option>
+                  <option value="academic">Academic</option>
+                  <option value="infrastructure">Infrastructure</option>
+                </select>
+              </div>
+
+              {/* Target Value */}
+              <div>
+                <label className="block text-sm font-bold text-gray-900 mb-2">Target Value *</label>
+                <input
+                  type="number"
+                  placeholder="e.g., 500"
+                  value={newGoal.targetValue || ""}
+                  onChange={(e) => setNewGoal({ ...newGoal, targetValue: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-gray-900 placeholder-gray-400 font-medium"
+                  step="0.01"
+                />
+              </div>
+
+              {/* Unit */}
+              <div>
+                <label className="block text-sm font-bold text-gray-900 mb-2">Unit *</label>
+                <input
+                  type="text"
+                  placeholder="e.g., %, students, Ugx, hours"
+                  value={newGoal.unit}
+                  onChange={(e) => setNewGoal({ ...newGoal, unit: e.target.value })}
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-gray-900 placeholder-gray-400 font-medium"
+                />
+              </div>
+
+              {/* Description */}
+              <div className="md:col-span-2">
+                <label className="block text-sm font-bold text-gray-900 mb-2">Description (Optional)</label>
+                <textarea
+                  placeholder="Add details about this goal..."
+                  value={newGoal.description}
+                  onChange={(e) => setNewGoal({ ...newGoal, description: e.target.value })}
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-gray-900 placeholder-gray-400 font-medium"
+                  rows={3}
+                />
+              </div>
             </div>
-            <div className="flex gap-3 mt-4">
+
+            <div className="flex gap-3 mt-6">
               <button
                 onClick={createGoal}
-                className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold"
+                disabled={submitting}
+                className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-bold transition-colors flex items-center gap-2"
               >
-                Create Goal
+                {submitting ? "Creating..." : "Create Goal"}
               </button>
               <button
-                onClick={() => setShowForm(false)}
-                className="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 font-semibold"
+                onClick={() => {
+                  setShowForm(false);
+                  setFormError("");
+                  setFormSuccess("");
+                }}
+                disabled={submitting}
+                className="px-6 py-3 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 disabled:cursor-not-allowed font-bold transition-colors"
               >
                 Cancel
               </button>
@@ -209,10 +316,15 @@ export default function TrusteeGoalsPage() {
             <p className="text-sm text-gray-500 mt-1">Create your first organizational goal to get started</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {goals.map((goal) => {
+          <>
+            <div className="mb-4 text-sm text-gray-600">
+              Showing <strong>{startIndex + 1}-{Math.min(endIndex, goals.length)}</strong> of <strong>{goals.length}</strong> goal{goals.length !== 1 ? 's' : ''}
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {paginatedGoals.map((goal) => {
               const statusColor = getStatusColor(goal.status);
-              const icon = categoryIcons[goal.category] || "🎯";
+              const IconComponent = categoryIcons[goal.category];
 
               return (
                 <div
@@ -228,7 +340,11 @@ export default function TrusteeGoalsPage() {
                   }`}
                 >
                   <div className="flex items-start justify-between mb-4">
-                    <div className="text-3xl">{icon}</div>
+                    <div>
+                      {IconComponent && (
+                        <IconComponent className="w-8 h-8 text-blue-600" />
+                      )}
+                    </div>
                     <div
                       className={`px-2 py-1 rounded text-xs font-bold ${
                         statusColor === "green"
@@ -282,6 +398,75 @@ export default function TrusteeGoalsPage() {
               );
             })}
           </div>
+
+          {/* Pagination Controls */}
+          {goals.length > itemsPerPage && (
+            <div className="mt-6 flex items-center justify-center gap-2">
+              <button
+                onClick={() => goToPage(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              
+              <div className="flex items-center gap-1">
+                {currentPage > 3 && (
+                  <>
+                    <button
+                      onClick={() => goToPage(1)}
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      1
+                    </button>
+                    {currentPage > 4 && <span className="px-2 text-gray-500">...</span>}
+                  </>
+                )}
+
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(page => {
+                    return page === currentPage ||
+                           page === currentPage - 1 ||
+                           page === currentPage - 2 ||
+                           page === currentPage + 1 ||
+                           page === currentPage + 2;
+                  })
+                  .map(page => (
+                    <button
+                      key={page}
+                      onClick={() => goToPage(page)}
+                      className={`px-3 py-2 border rounded-lg text-sm font-medium ${
+                        page === currentPage
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+
+                {currentPage < totalPages - 2 && (
+                  <>
+                    {currentPage < totalPages - 3 && <span className="px-2 text-gray-500">...</span>}
+                    <button
+                      onClick={() => goToPage(totalPages)}
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      {totalPages}
+                    </button>
+                  </>                )}
+              </div>
+
+              <button
+                onClick={() => goToPage(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
+          )}
+          </>
         )}
       </div>
     </DashboardLayout>

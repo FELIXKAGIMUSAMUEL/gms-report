@@ -12,6 +12,7 @@ import {
   TrashIcon,
 } from "@heroicons/react/24/outline";
 import * as XLSX from "xlsx";
+import { buildSchoolMatchIndex, resolveSchoolName } from "@/lib/school-matching";
 
 interface P7PleResult {
   id: string;
@@ -45,6 +46,10 @@ export default function P7EntryPage() {
   const [schools, setSchools] = useState<School[]>([]);
   const [results, setResults] = useState<P7PleResult[]>([]);
   const [editingData, setEditingData] = useState<Record<string, P7PleResult>>({});
+
+  const schoolMatchIndex = useMemo(() => buildSchoolMatchIndex(schools), [schools]);
+  const getResolvedSchoolName = (rawValue: string) => resolveSchoolName(rawValue, schoolMatchIndex);
+  const getDisplaySchoolName = (rawValue: string) => getResolvedSchoolName(rawValue) || rawValue;
 
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -275,6 +280,10 @@ export default function P7EntryPage() {
     setError(null);
 
     try {
+      if (schools.length === 0) {
+        await fetchSchools();
+      }
+
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -286,15 +295,23 @@ export default function P7EntryPage() {
 
       let savedCount = 0;
       let failedCount = 0;
+      const skippedSchools: string[] = [];
 
       for (const row of jsonData as any[]) {
         const school = row.School || row.SCHOOL || row.school;
         if (!school) continue;
 
+        const resolvedName = getResolvedSchoolName(school);
+        if (!resolvedName) {
+          skippedSchools.push(String(school));
+          failedCount++;
+          continue;
+        }
+
         const year = Number.parseInt(row.Year || row.YEAR || selectedYear, 10) || selectedYear;
 
         const payload = {
-          school,
+          school: resolvedName,
           year,
           popn: Number.parseInt(row.POPN ?? row.Popn ?? row.popn ?? 0, 10) || 0,
           agg4: Number.parseInt(row["AGG 4"] ?? row.AGG4 ?? row.agg4 ?? 0, 10) || 0,
@@ -327,7 +344,10 @@ export default function P7EntryPage() {
         setSuccess(true);
         setTimeout(() => setSuccess(false), 3000);
       } else {
-        setError(`Imported ${savedCount} rows, but ${failedCount} failed`);
+        const preview = skippedSchools.slice(0, 5).join(", ");
+        const suffix = skippedSchools.length > 5 ? "..." : "";
+        const skippedMsg = skippedSchools.length > 0 ? ` Skipped: ${preview}${suffix}` : "";
+        setError(`Imported ${savedCount} rows, but ${failedCount} failed.${skippedMsg}`);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to import data");
@@ -339,7 +359,7 @@ export default function P7EntryPage() {
 
   const handleExportToExcel = () => {
     const rows = results.map((record) => ({
-      School: record.school,
+      School: getDisplaySchoolName(record.school),
       Year: record.year,
       POPN: record.popn,
       "AGG 4": record.agg4,
@@ -668,7 +688,7 @@ export default function P7EntryPage() {
                 <tbody className="divide-y divide-gray-200">
                   {sortedResults.map((result) => (
                     <tr key={result.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 font-semibold text-gray-900">{result.school}</td>
+                      <td className="px-4 py-3 font-semibold text-gray-900">{getDisplaySchoolName(result.school)}</td>
                       <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.popn}</td>
                       <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.agg4}</td>
                       <td className="px-3 py-3 text-center border-l border-gray-300 text-gray-700">{result.divisionI}</td>

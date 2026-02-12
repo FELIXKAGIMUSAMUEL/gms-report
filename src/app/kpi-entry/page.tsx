@@ -217,9 +217,20 @@ function SavedReportsList({ selectedYear, selectedTerm, onLoad }: { selectedYear
 }
 
 
+interface SchoolKPIEntry {
+  school: string;
+  feesCollectionPercent: number;
+  expenditurePercent: number;
+  infrastructurePercent: number;
+  syllabusCoveragePercent: number;
+  admissionsCount: number;
+}
+
 export default function KPIEntryPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+
+  const [entryMode, setEntryMode] = useState<"aggregate" | "per-school">("aggregate");
 
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [selectedTerm, setSelectedTerm] = useState(1);
@@ -248,6 +259,7 @@ export default function KPIEntryPage() {
   const [enrollmentRecords, setEnrollmentRecords] = useState<EnrollmentRecord[]>([]);
   const [theologyRecords, setTheologyRecords] = useState<EnrollmentRecord[]>([]);
   const [prefillLoading, setPrefillLoading] = useState(false);
+  const [schoolKPIData, setSchoolKPIData] = useState<SchoolKPIEntry[]>([]);
   const [prepPrefill, setPrepPrefill] = useState<{ percent: number; label: string }>({ percent: 0, label: "No prep data" });
   const [p7PrepResults, setP7PrepResults] = useState<P7PrepResult[]>([]);
 
@@ -283,6 +295,21 @@ export default function KPIEntryPage() {
   }, []);
 
   const aggregateCounts = (records: EnrollmentRecord[]) => records.reduce((sum, r) => sum + (r.count || 0), 0);
+
+  useEffect(() => {
+    if (schools.length > 0 && schoolKPIData.length === 0) {
+      setSchoolKPIData(
+        schools.map(school => ({
+          school: school.name,
+          feesCollectionPercent: 0,
+          expenditurePercent: 0,
+          infrastructurePercent: 0,
+          syllabusCoveragePercent: 0,
+          admissionsCount: 0,
+        }))
+      );
+    }
+  }, [schools, schoolKPIData.length]);
 
   const loadPrefills = useCallback(async () => {
     setPrefillLoading(true);
@@ -364,6 +391,99 @@ export default function KPIEntryPage() {
 
   const termWeekToAbsolute = (term: number, week: number): number => {
     return (term - 1) * 13 + week;
+  };
+
+  const calculateAggregates = (schoolData: SchoolKPIEntry[]) => {
+    if (!schoolData.length) return null;
+    const avgFees = schoolData.reduce((s, d) => s + d.feesCollectionPercent, 0) / schoolData.length;
+    const avgExpenditure = schoolData.reduce((s, d) => s + d.expenditurePercent, 0) / schoolData.length;
+    const avgInfra = schoolData.reduce((s, d) => s + d.infrastructurePercent, 0) / schoolData.length;
+    const avgSyllabus = schoolData.reduce((s, d) => s + d.syllabusCoveragePercent, 0) / schoolData.length;
+    const totalAdmissions = schoolData.reduce((s, d) => s + d.admissionsCount, 0);
+    return { avgFees, avgExpenditure, avgInfra, avgSyllabus, totalAdmissions };
+  };
+
+  const handleSchoolKPIChange = (index: number, field: keyof SchoolKPIEntry, value: number) => {
+    setSchoolKPIData(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
+
+  const handleSubmitPerSchool = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    try {
+      const absWeek = termWeekToAbsolute(selectedTerm, selectedWeek);
+      const agg = calculateAggregates(schoolKPIData);
+      if (!agg) throw new Error("No school data");
+
+      const checkRes = await fetch(`/api/reports?year=${selectedYear}&weekNumber=${absWeek}`);
+      let existing: WeeklyReport | null = null;
+      if (checkRes.ok) {
+        const data = await checkRes.json();
+        existing = (data?.data || [])[0] || null;
+      }
+      if (existing) {
+        setExistingReport(existing);
+        setShowExistingModal(true);
+        return;
+      }
+
+      const payload = {
+        weekNumber: absWeek,
+        year: selectedYear,
+        term: selectedTerm,
+        feesCollectionPercent: agg.avgFees,
+        schoolsExpenditurePercent: agg.avgExpenditure,
+        infrastructurePercent: agg.avgInfra,
+        syllabusCoveragePercent: agg.avgSyllabus,
+        admissions: agg.totalAdmissions,
+        totalEnrollment: formData.totalEnrollment || 0,
+        theologyEnrollment: formData.theologyEnrollment || 0,
+        p7PrepExamsPercent: formData.p7PrepExamsPercent || 0,
+      };
+
+      const res = await fetch("/api/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) throw new Error("Failed to save");
+      const report = await res.json();
+
+      await Promise.all(
+        schoolKPIData.map(data =>
+          fetch("/api/school-kpi", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              weeklyReportId: report.id,
+              school: data.school,
+              year: selectedYear,
+              term: selectedTerm,
+              week: selectedWeek,
+              feesCollectionPercent: data.feesCollectionPercent,
+              expenditurePercent: data.expenditurePercent,
+              infrastructurePercent: data.infrastructurePercent,
+              syllabusCoveragePercent: data.syllabusCoveragePercent,
+              admissionsCount: data.admissionsCount,
+            }),
+          })
+        )
+      );
+
+      setSuccess(true);
+      setTimeout(() => router.push("/dashboard"), 1500);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -586,7 +706,33 @@ export default function KPIEntryPage() {
         </div>
 
         {/* Form */}
-        <form ref={formRef} onSubmit={handleSubmit} className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 space-y-6">
+        <form ref={formRef} onSubmit={entryMode === "per-school" ? handleSubmitPerSchool : handleSubmit} className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 space-y-6">
+
+          {/* Entry Mode Tabs */}
+          <div className="flex gap-2 border-b border-gray-200 mb-6">
+            <button
+              type="button"
+              onClick={() => setEntryMode("aggregate")}
+              className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
+                entryMode === "aggregate"
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              Aggregate Entry
+            </button>
+            <button
+              type="button"
+              onClick={() => setEntryMode("per-school")}
+              className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
+                entryMode === "per-school"
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              Per-School Entry
+            </button>
+          </div>
 
           {/* Existing Period Modal */}
           {showExistingModal && existingReport && (
@@ -625,6 +771,9 @@ export default function KPIEntryPage() {
             </div>
           )}
           
+          {/* Aggregate Entry Mode */}
+          {entryMode === "aggregate" && (
+            <>
           {/* Financial KPIs */}
           <div>
             <h3 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-200">Financial KPIs</h3>
@@ -782,6 +931,120 @@ export default function KPIEntryPage() {
               </div>
             </div>
           </div>
+            </>
+          )}
+
+          {/* Per-School Entry Mode */}
+          {entryMode === "per-school" && (
+            <>
+              <div className="space-y-6">
+                {/* Per-School KPI Table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-200">
+                        <th className="px-4 py-3 text-left font-semibold text-gray-900">School</th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-900">Fees %</th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-900">Expenditure %</th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-900">Infrastructure %</th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-900">Syllabus %</th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-900">Admissions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {schoolKPIData.map((row, idx) => (
+                        <tr key={idx} className="border-b border-gray-200 hover:bg-gray-50">
+                          <td className="px-4 py-3 font-medium text-gray-900">{row.school}</td>
+                          <td className="px-4 py-3">
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.1"
+                              value={row.feesCollectionPercent || ''}
+                              onChange={(e) => handleSchoolKPIChange(idx, "feesCollectionPercent", parseFloat(e.target.value) || 0)}
+                              className="w-20 px-2 py-1 border border-gray-300 rounded text-gray-900 text-sm"
+                            />
+                          </td>
+                          <td className="px-4 py-3">
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.1"
+                              value={row.expenditurePercent || ''}
+                              onChange={(e) => handleSchoolKPIChange(idx, "expenditurePercent", parseFloat(e.target.value) || 0)}
+                              className="w-20 px-2 py-1 border border-gray-300 rounded text-gray-900 text-sm"
+                            />
+                          </td>
+                          <td className="px-4 py-3">
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.1"
+                              value={row.infrastructurePercent || ''}
+                              onChange={(e) => handleSchoolKPIChange(idx, "infrastructurePercent", parseFloat(e.target.value) || 0)}
+                              className="w-20 px-2 py-1 border border-gray-300 rounded text-gray-900 text-sm"
+                            />
+                          </td>
+                          <td className="px-4 py-3">
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.1"
+                              value={row.syllabusCoveragePercent || ''}
+                              onChange={(e) => handleSchoolKPIChange(idx, "syllabusCoveragePercent", parseFloat(e.target.value) || 0)}
+                              className="w-20 px-2 py-1 border border-gray-300 rounded text-gray-900 text-sm"
+                            />
+                          </td>
+                          <td className="px-4 py-3">
+                            <input
+                              type="number"
+                              min="0"
+                              value={row.admissionsCount || ''}
+                              onChange={(e) => handleSchoolKPIChange(idx, "admissionsCount", parseInt(e.target.value) || 0)}
+                              className="w-20 px-2 py-1 border border-gray-300 rounded text-gray-900 text-sm"
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Auto-Calculated Aggregates */}
+                {schoolKPIData.length > 0 && calculateAggregates(schoolKPIData) && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h4 className="font-semibold text-gray-900 mb-3">Auto-Calculated Aggregates</h4>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <span className="text-gray-700">Avg Fees %:</span>
+                        <span className="ml-2 font-semibold text-gray-900">{calculateAggregates(schoolKPIData)?.avgFees.toFixed(1)}%</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-700">Avg Expenditure %:</span>
+                        <span className="ml-2 font-semibold text-gray-900">{calculateAggregates(schoolKPIData)?.avgExpenditure.toFixed(1)}%</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-700">Avg Infrastructure %:</span>
+                        <span className="ml-2 font-semibold text-gray-900">{calculateAggregates(schoolKPIData)?.avgInfra.toFixed(1)}%</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-700">Avg Syllabus %:</span>
+                        <span className="ml-2 font-semibold text-gray-900">{calculateAggregates(schoolKPIData)?.avgSyllabus.toFixed(1)}%</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-700">Total Admissions:</span>
+                        <span className="ml-2 font-semibold text-gray-900">{calculateAggregates(schoolKPIData)?.totalAdmissions}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
 
           {/* Submit */}
           <div className="flex gap-4 pt-6">
@@ -790,7 +1053,7 @@ export default function KPIEntryPage() {
               disabled={loading}
               className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 font-medium transition-colors"
             >
-              {loading ? "Saving..." : "Save KPI Data"}
+              {loading ? "Saving..." : `Save KPI Data (${entryMode === "per-school" ? "Per-School" : "Aggregate"})`}
             </button>
             <button
               type="button"

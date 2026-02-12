@@ -5,13 +5,15 @@ import {
   WifiIcon, 
   CloudArrowUpIcon,
   CheckCircleIcon,
-  XCircleIcon 
+  XCircleIcon,
+  XMarkIcon
 } from "@heroicons/react/24/outline";
 
 export default function OfflineIndicator() {
   const [isOnline, setIsOnline] = useState(true);
   const [showNotification, setShowNotification] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
+  const [dismissedOffline, setDismissedOffline] = useState(false);
 
   useEffect(() => {
     // Check initial online status
@@ -19,6 +21,7 @@ export default function OfflineIndicator() {
 
     const handleOnline = () => {
       setIsOnline(true);
+      setDismissedOffline(false);
       setShowNotification(true);
       setSyncStatus('syncing');
       
@@ -67,7 +70,7 @@ export default function OfflineIndicator() {
   }, [showNotification, isOnline, syncStatus]);
 
   // Persistent offline indicator (top bar)
-  if (!isOnline) {
+  if (!isOnline && !dismissedOffline) {
     return (
       <div className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-red-600 to-orange-600 text-white px-4 py-2 shadow-lg">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
@@ -81,6 +84,13 @@ export default function OfflineIndicator() {
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
             <span className="text-xs">Waiting for connection...</span>
+            <button
+              onClick={() => setDismissedOffline(true)}
+              className="ml-2 inline-flex items-center justify-center rounded-full p-1 text-white/80 hover:text-white hover:bg-white/10"
+              aria-label="Dismiss offline notification"
+            >
+              <XMarkIcon className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </div>

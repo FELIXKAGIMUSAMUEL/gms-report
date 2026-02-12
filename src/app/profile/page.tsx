@@ -85,15 +85,9 @@ export default function ProfilePage() {
       if (res.ok) {
         setMessage({ type: "success", text: "Profile updated successfully!" });
         
-        // Update session with new data
-        await update({
-          ...session,
-          user: {
-            ...session?.user,
-            name: data.name,
-            email: data.email,
-          },
-        });
+        // Refresh the entire session to pick up changes from JWT
+        // This will re-evaluate the JWT and update the session with new name/email
+        await update();
 
         // Clear password fields
         setFormData((prev) => ({

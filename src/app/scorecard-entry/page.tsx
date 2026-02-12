@@ -11,6 +11,7 @@ import {
   BuildingOfficeIcon, AcademicCapIcon,
   ArrowUpTrayIcon
 } from "@heroicons/react/24/outline";
+import { buildSchoolMatchIndex, resolveSchoolName } from "@/lib/school-matching";
 
 interface School {
   id: string;
@@ -55,6 +56,7 @@ const formatScore = (value?: number) =>
 const formatAverage = (value?: number) =>
   typeof value === "number" && Number.isFinite(value) ? value.toFixed(1) : "—";
 
+
 export default function ScorecardEntryPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -92,6 +94,11 @@ export default function ScorecardEntryPage() {
   const [selectedSchools, setSelectedSchools] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<'overall' | 'school'>('overall');
   const [selectionMode, setSelectionMode] = useState(false);
+
+  const schoolMatchIndex = useMemo(() => buildSchoolMatchIndex(schools), [schools]);
+
+  const getResolvedSchoolName = (rawValue: string) => resolveSchoolName(rawValue, schoolMatchIndex);
+  const getDisplaySchoolName = (rawValue: string) => getResolvedSchoolName(rawValue) || rawValue;
 
   const downloadTemplate = () => {
     // Create sample data
@@ -420,6 +427,38 @@ export default function ScorecardEntryPage() {
     }
   };
 
+  const handleClearAllScorecardsForPeriod = async () => {
+    if (scorecards.length === 0) {
+      alert("No scorecards to clear for this period");
+      return;
+    }
+
+    if (!confirm(`Clear ALL scorecard data for Term ${selectedTerm}, Week ${selectedWeek}, ${selectedYear}? This will delete ${scorecards.length} record(s) and cannot be undone.`)) {
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Delete each scorecard for this period
+      for (const sc of scorecards) {
+        await fetch(`/api/scorecard?id=${sc.id}`, {
+          method: "DELETE",
+        });
+      }
+
+      // Refresh the scorecards list
+      await fetchScorecards();
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (err) {
+      setError("Failed to clear scorecards");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const toggleSchoolSelection = (schoolName: string) => {
     const newSelected = new Set(selectedSchools);
     if (newSelected.has(schoolName)) {
@@ -558,6 +597,10 @@ export default function ScorecardEntryPage() {
     setError(null);
 
     try {
+      if (schools.length === 0) {
+        await fetchSchools();
+      }
+
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -571,6 +614,7 @@ export default function ScorecardEntryPage() {
         try {
           // Map Excel columns to scorecard fields
           const schoolName = row.SCH || row.School || row.SCHOOL || row.school;
+          const resolvedSchoolName = getResolvedSchoolName(schoolName);
           
           // Parse values and check if they're in decimal format (0.247) vs percentage (24.7)
           // Excel stores percentages as decimals, so if value < 1 and we expect 0-100, multiply by 100
@@ -597,8 +641,14 @@ export default function ScorecardEntryPage() {
             continue;
           }
 
+          if (!resolvedSchoolName) {
+            errors.push(`Row skipped: Unrecognized school '${schoolName}'`);
+            failedCount++;
+            continue;
+          }
+
           const payload = {
-            school: schoolName,
+            school: resolvedSchoolName,
             week: importWeek,
             year: importYear,
             term: importTerm,
@@ -729,6 +779,7 @@ export default function ScorecardEntryPage() {
       tdp: calculateAvg(sc => sc.technologyScore),
       theology: calculateAvg(sc => sc.theologyScore),
       overall: calculateAvg(sc => sc.totalScore),
+      averagePercent: calculateAvg(sc => sc.averageScore),
     };
   }, [rankedTableData]);
 
@@ -776,9 +827,19 @@ export default function ScorecardEntryPage() {
   return (
     <DashboardLayout>
       <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-4">
           <h1 className="text-3xl font-bold text-gray-900">School Scorecard</h1>
-          <div className="flex gap-2">
+          <button
+            onClick={() => router.push("/scorecard-analysis")}
+            className="inline-flex items-center px-4 py-2 bg-cyan-600 text-white text-sm font-medium rounded-lg hover:bg-cyan-700 transition-colors"
+            title="View scorecard analysis with moving averages"
+          >
+            <ArrowTrendingUpIcon className="w-4 h-4 mr-2" />
+            Analysis
+          </button>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 flex-wrap">
             <label className="inline-flex items-center px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors cursor-pointer">
               <ArrowUpTrayIcon className="w-4 h-4 mr-2" />
               {importing ? 'Importing...' : 'Import Excel'}
@@ -823,7 +884,6 @@ export default function ScorecardEntryPage() {
               Manage Departments
             </button>
           </div>
-        </div>
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg">
@@ -980,7 +1040,7 @@ export default function ScorecardEntryPage() {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
           <div className="bg-gradient-to-r from-purple-600 to-blue-600 px-6 py-4 flex items-center justify-between gap-4 flex-wrap">
             <h2 className="text-xl font-bold text-white">Score Card Table - Term {selectedTerm}, Week {selectedWeek} ({selectedYear})</h2>
-            <div className="flex gap-2 flex-shrink-0">
+            <div className="flex gap-2 flex-shrink-0 flex-wrap">
               <button
                 onClick={downloadTableAsExcel}
                 className="inline-flex items-center px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
@@ -989,25 +1049,15 @@ export default function ScorecardEntryPage() {
                 <ArrowUpTrayIcon className="w-4 h-4 mr-2" />
                 Download Table
               </button>
-              {selectionMode && (
-                <button
-                  onClick={() => {
-                    setSelectionMode(false);
-                    setSelectedSchools(new Set());
-                  }}
-                  className="inline-flex items-center px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors"
-                >
-                  Done Selecting
-                </button>
-              )}
-              {!selectionMode && (
-                <button
-                  onClick={() => setSelectionMode(true)}
-                  className="inline-flex items-center px-4 py-2 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700 transition-colors"
-                >
-                  Select for Deletion
-                </button>
-              )}
+              <button
+                onClick={handleClearAllScorecardsForPeriod}
+                disabled={loading || scorecards.length === 0}
+                className="inline-flex items-center px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:bg-gray-400 transition-colors"
+                title="Clear all scorecard data for this period"
+              >
+                <TrashIcon className="w-4 h-4 mr-2" />
+                Clear All
+              </button>
             </div>
           </div>
           
@@ -1022,7 +1072,7 @@ export default function ScorecardEntryPage() {
                   <th className="px-2 py-2 text-center font-semibold text-gray-700 border-l border-gray-300" colSpan={2}>FINANCE</th>
                   <th className="px-2 py-2 text-center font-semibold text-gray-700 border-l border-gray-300" colSpan={2}>THEOLOGY</th>
                   <th className="px-2 py-2 text-center font-semibold text-gray-700 border-l border-gray-300" colSpan={2}>TDP</th>
-                  <th className="px-2 py-2 text-center font-semibold text-gray-700 border-l border-gray-300" colSpan={2}>OVERALL TERM {selectedTerm}, {selectedYear}</th>
+                  <th className="px-2 py-2 text-center font-semibold text-gray-700 border-l border-gray-300" colSpan={3}>OVERALL TERM {selectedTerm}, {selectedYear}</th>
                   <th className="px-2 py-2 text-center font-semibold text-gray-700 border-l border-gray-300">ACTIONS</th>
                 </tr>
                 <tr>
@@ -1039,6 +1089,7 @@ export default function ScorecardEntryPage() {
                   <th className="px-2 py-1 text-center font-semibold text-gray-600 border-l border-gray-300">SCORE</th>
                   <th className="px-2 py-1 text-center font-semibold text-gray-600">RANK</th>
                   <th className="px-2 py-1 text-center font-semibold text-gray-600 border-l border-gray-300">SCORE</th>
+                  <th className="px-2 py-1 text-center font-semibold text-gray-600">AVG %</th>
                   <th className="px-2 py-1 text-center font-semibold text-gray-600">TREND</th>
                   <th className="px-2 py-1 text-center font-semibold text-gray-600 border-l border-gray-300"></th>
                 </tr>
@@ -1046,7 +1097,7 @@ export default function ScorecardEntryPage() {
               <tbody className="divide-y divide-gray-200">
                 {rankedTableData.length === 0 ? (
                   <tr>
-                    <td colSpan={13} className="px-4 py-8 text-center text-gray-500">
+                    <td colSpan={selectionMode ? 16 : 15} className="px-4 py-8 text-center text-gray-500">
                       No scorecards for this period. Add one above to get started!
                     </td>
                   </tr>
@@ -1067,7 +1118,7 @@ export default function ScorecardEntryPage() {
                             />
                           </td>
                         )}
-                        <td className="px-2 py-2 font-semibold text-gray-900">{item.schoolName}</td>
+                        <td className="px-2 py-2 font-semibold text-gray-900">{getDisplaySchoolName(item.schoolName)}</td>
                         <td className="px-2 py-2 text-center text-gray-700">{formatScore(item.academicScore)}</td>
                         <td className="px-2 py-2 text-center font-semibold text-gray-700 bg-blue-50">{item.academicScore > 0 ? item.academicRank : '-'}</td>
                         <td className="px-2 py-2 text-center text-gray-700 border-l border-gray-300">{formatScore(item.qualityScore)}</td>
@@ -1079,6 +1130,7 @@ export default function ScorecardEntryPage() {
                         <td className="px-2 py-2 text-center text-gray-700 border-l border-gray-300">{formatScore(item.technologyScore)}</td>
                         <td className="px-2 py-2 text-center font-semibold text-gray-700 bg-blue-50">{item.technologyScore > 0 ? item.tdpRank : '-'}</td>
                         <td className="px-2 py-2 text-center text-gray-700 border-l border-gray-300 font-bold">{formatScore(item.totalScore)}</td>
+                        <td className="px-2 py-2 text-center text-gray-700">{formatAverage(item.averageScore)}</td>
                         <td className="px-2 py-2 text-center font-semibold text-gray-700 bg-blue-50">
                           <div className="flex flex-col items-center justify-center">
                             <span>{item.totalScore > 0 ? item.overallRank : '-'}</span>
@@ -1134,6 +1186,7 @@ export default function ScorecardEntryPage() {
                     <td className="px-2 py-2 text-center text-gray-700 border-l border-gray-300">{formatAverage(averages.tdp)}</td>
                     <td className="px-2 py-2 text-center bg-blue-100"></td>
                     <td className="px-2 py-2 text-center text-gray-700 border-l border-gray-300">{formatAverage(averages.overall)}</td>
+                    <td className="px-2 py-2 text-center text-gray-700">{formatAverage(averages.averagePercent)}</td>
                     <td className="px-2 py-2 text-center bg-blue-100"></td>
                     <td className="px-2 py-2 border-l border-gray-300"></td>
                   </tr>

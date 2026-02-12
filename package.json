@@ -2,6 +2,9 @@
   "name": "gms-report",
   "version": "0.1.0",
   "private": true,
+  "author": "Mustafa - Sir Apollo Kaggwa Schools",
+  "license": "UNLICENSED",
+  "description": "General Manager's Report Portal for Sir Apollo Kaggwa Schools",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

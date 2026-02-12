@@ -4,7 +4,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
-import { AcademicCapIcon } from "@heroicons/react/24/outline";
+import { ChartBarIcon, ArrowUpIcon, SparklesIcon } from "@heroicons/react/24/outline";
 
 interface Comparison {
   metric: string;
@@ -200,7 +200,10 @@ export default function ComparativeAnalysisPage() {
         {/* Analysis Tools Section */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">📊 Peer Benchmarking</h3>
+            <div className="flex items-center gap-3 mb-4">
+              <SparklesIcon className="w-6 h-6 text-blue-600" />
+              <h3 className="text-lg font-semibold text-gray-900">Peer Benchmarking</h3>
+            </div>
             <p className="text-gray-600 text-sm mb-4">
               Compare each school with similar-sized schools to identify best practices
             </p>
@@ -210,7 +213,10 @@ export default function ComparativeAnalysisPage() {
           </div>
 
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">📈 Historical Trends</h3>
+            <div className="flex items-center gap-3 mb-4">
+              <ArrowUpIcon className="w-6 h-6 text-blue-600" />
+              <h3 className="text-lg font-semibold text-gray-900">Historical Trends</h3>
+            </div>
             <p className="text-gray-600 text-sm mb-4">
               View 3-5 year trend analysis for selected schools
             </p>

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/app/api/auth/[...nextauth]/authOptions";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
@@ -49,6 +49,14 @@ export async function GET(request: NextRequest) {
               term: true,
               weekNumber: true,
               generalManager: true,
+              feesCollectionPercent: true,
+              schoolsExpenditurePercent: true,
+              infrastructurePercent: true,
+              syllabusCoveragePercent: true,
+              admissions: true,
+              totalEnrollment: true,
+              theologyEnrollment: true,
+              p7PrepExamsPercent: true,
             },
           },
         },
@@ -66,6 +74,37 @@ export async function GET(request: NextRequest) {
       }
 
       filteredComments.forEach((c) => {
+        // Map field names to KPI values
+        let kpiValue = null;
+        if (c.report) {
+          switch (c.field) {
+            case "feesComment":
+              kpiValue = { label: "Fees Collection", value: `${c.report.feesCollectionPercent.toFixed(1)}%` };
+              break;
+            case "expenditureComment":
+              kpiValue = { label: "Expenditure", value: `${c.report.schoolsExpenditurePercent.toFixed(1)}%` };
+              break;
+            case "infrastructureComment":
+              kpiValue = { label: "Infrastructure", value: `${c.report.infrastructurePercent.toFixed(1)}%` };
+              break;
+            case "syllabusComment":
+              kpiValue = { label: "Syllabus Coverage", value: `${c.report.syllabusCoveragePercent.toFixed(1)}%` };
+              break;
+            case "admissionsComment":
+              kpiValue = { label: "Admissions", value: c.report.admissions.toString() };
+              break;
+            case "enrollmentComment":
+              kpiValue = { label: "Total Enrollment", value: c.report.totalEnrollment.toString() };
+              break;
+            case "theologyComment":
+              kpiValue = { label: "Theology Enrollment", value: c.report.theologyEnrollment.toString() };
+              break;
+            case "p7prepComment":
+              kpiValue = { label: "P.7 Prep Results", value: `${c.report.p7PrepExamsPercent.toFixed(1)}%` };
+              break;
+          }
+        }
+
         results.push({
           id: c.id,
           category: "kpi",
@@ -74,12 +113,13 @@ export async function GET(request: NextRequest) {
           createdAt: c.createdAt,
           report: c.report,
           user: null,
+          kpiValue,
         });
       });
     }
 
-    // Fetch Reactions (for Red Issues, Projects, Events)
-    if (!category || category === "all" || category === "red-issues" || category === "projects" || category === "events") {
+    // Fetch Reactions (for Red Issues, Projects, Events, and KPI metrics)
+    if (!category || category === "all" || category === "kpi" || category === "red-issues" || category === "projects" || category === "events") {
       const reactionWhere: any = {
         type: "COMMENT", // Only fetch comment-type reactions
       };
@@ -103,6 +143,13 @@ export async function GET(request: NextRequest) {
         reactionWhere.sectionId = { startsWith: "project-" };
       } else if (category === "events") {
         reactionWhere.sectionId = { startsWith: "event-" };
+      } else if (category === "kpi") {
+        // KPI reactions don't have these prefixes
+        reactionWhere.AND = [
+          { NOT: { sectionId: { startsWith: "red-issue-" } } },
+          { NOT: { sectionId: { startsWith: "project-" } } },
+          { NOT: { sectionId: { startsWith: "event-" } } },
+        ];
       }
 
       const reactions = await prisma.reaction.findMany({
@@ -120,6 +167,14 @@ export async function GET(request: NextRequest) {
               term: true,
               weekNumber: true,
               generalManager: true,
+              feesCollectionPercent: true,
+              schoolsExpenditurePercent: true,
+              infrastructurePercent: true,
+              syllabusCoveragePercent: true,
+              admissions: true,
+              totalEnrollment: true,
+              theologyEnrollment: true,
+              p7PrepExamsPercent: true,
             },
           },
         },
@@ -135,7 +190,7 @@ export async function GET(request: NextRequest) {
             ? "projects"
             : r.sectionId.startsWith("event-")
               ? "events"
-              : "other";
+              : "kpi"; // Default to KPI for other sectionIds
 
         // Skip if category filter doesn't match
         if (category && category !== "all" && category !== categoryType) {
@@ -147,8 +202,10 @@ export async function GET(request: NextRequest) {
           continue;
         }
 
-        // Fetch the related item details
+        // Fetch the related item details or KPI values
         let itemDetails = null;
+        let kpiValue = null;
+        
         if (categoryType === "red-issues") {
           const issueId = r.sectionId.replace("red-issue-", "");
           const issue = await prisma.redIssue.findUnique({
@@ -158,18 +215,38 @@ export async function GET(request: NextRequest) {
           itemDetails = issue ? { title: issue.issue, status: issue.status, inCharge: issue.inCharge } : null;
         } else if (categoryType === "projects") {
           const projectId = r.sectionId.replace("project-", "");
-          const project = await prisma.project.findUnique({
+          const project = await prisma.gMProject.findUnique({
             where: { id: projectId },
             select: { projectName: true, status: true, projectManager: true },
           });
           itemDetails = project ? { title: project.projectName, status: project.status, inCharge: project.projectManager } : null;
         } else if (categoryType === "events") {
           const eventId = r.sectionId.replace("event-", "");
-          const event = await prisma.event.findUnique({
+          const event = await prisma.upcomingEvent.findUnique({
             where: { id: eventId },
             select: { activity: true, date: true, inCharge: true },
           });
           itemDetails = event ? { title: event.activity, date: event.date, inCharge: event.inCharge } : null;
+        } else if (categoryType === "kpi" && r.weeklyReport) {
+          // Map sectionId to KPI values
+          const sectionId = r.sectionId.toLowerCase();
+          if (sectionId.includes("fees") || sectionId.includes("collection")) {
+            kpiValue = { label: "Fees Collection", value: `${r.weeklyReport.feesCollectionPercent.toFixed(1)}%` };
+          } else if (sectionId.includes("expenditure")) {
+            kpiValue = { label: "Expenditure", value: `${r.weeklyReport.schoolsExpenditurePercent.toFixed(1)}%` };
+          } else if (sectionId.includes("infrastructure")) {
+            kpiValue = { label: "Infrastructure", value: `${r.weeklyReport.infrastructurePercent.toFixed(1)}%` };
+          } else if (sectionId.includes("syllabus")) {
+            kpiValue = { label: "Syllabus Coverage", value: `${r.weeklyReport.syllabusCoveragePercent.toFixed(1)}%` };
+          } else if (sectionId.includes("admission")) {
+            kpiValue = { label: "Admissions", value: r.weeklyReport.admissions.toString() };
+          } else if (sectionId.includes("enrollment") && !sectionId.includes("theology")) {
+            kpiValue = { label: "Total Enrollment", value: r.weeklyReport.totalEnrollment.toString() };
+          } else if (sectionId.includes("theology")) {
+            kpiValue = { label: "Theology Enrollment", value: r.weeklyReport.theologyEnrollment.toString() };
+          } else if (sectionId.includes("p7") || sectionId.includes("prep")) {
+            kpiValue = { label: "P.7 Prep Results", value: `${r.weeklyReport.p7PrepExamsPercent.toFixed(1)}%` };
+          }
         }
 
         results.push({
@@ -181,6 +258,7 @@ export async function GET(request: NextRequest) {
           report: r.weeklyReport,
           user: r.user,
           itemDetails,
+          kpiValue,
         });
       }
     }

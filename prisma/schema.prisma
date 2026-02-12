@@ -24,31 +24,53 @@ model User {
 }
 
 model WeeklyReport {
-  id                        String     @id @default(cuid())
+  id                        String          @id @default(cuid())
   weekNumber                Int
   year                      Int
   weekStartDate             DateTime
   weekEndDate               DateTime
   publishedAt               DateTime?
-  isDraft                   Boolean    @default(true)
-  feesCollectionPercent     Float      @default(0)
-  schoolsExpenditurePercent Float      @default(0)
-  infrastructurePercent     Float      @default(0)
-  totalEnrollment           Int        @default(0)
-  theologyEnrollment        Int        @default(0)
-  p7PrepExamsPercent        Float      @default(0)
-  createdAt                 DateTime   @default(now())
-  updatedAt                 DateTime   @updatedAt
-  admissions                Int        @default(0)
-  syllabusCoveragePercent   Float      @default(0)
-  term                      Int        @default(1)
+  isDraft                   Boolean         @default(true)
+  feesCollectionPercent     Float           @default(0)
+  schoolsExpenditurePercent Float           @default(0)
+  infrastructurePercent     Float           @default(0)
+  totalEnrollment           Int             @default(0)
+  theologyEnrollment        Int             @default(0)
+  p7PrepExamsPercent        Float           @default(0)
+  createdAt                 DateTime        @default(now())
+  updatedAt                 DateTime        @updatedAt
+  admissions                Int             @default(0)
+  syllabusCoveragePercent   Float           @default(0)
+  term                      Int             @default(1)
   generalManager            String?
   comments                  Comment[]
   reactions                 Reaction[]
+  schoolKPIData             SchoolKPIData[]
 
   @@unique([weekNumber, year, term])
   @@index([year, term, weekNumber])
   @@index([publishedAt])
+}
+
+model SchoolKPIData {
+  id                      String       @id @default(cuid())
+  weeklyReportId          String
+  weeklyReport            WeeklyReport @relation(fields: [weeklyReportId], references: [id], onDelete: Cascade)
+  school                  String
+  year                    Int
+  term                    Int
+  week                    Int
+  feesCollectionPercent   Float        @default(0)
+  expenditurePercent      Float        @default(0)
+  infrastructurePercent   Float        @default(0)
+  syllabusCoveragePercent Float        @default(0)
+  admissionsCount         Int          @default(0)
+  createdAt               DateTime     @default(now())
+  updatedAt               DateTime     @updatedAt
+
+  @@unique([weeklyReportId, school])
+  @@index([year, term, week])
+  @@index([school])
 }
 
 model Reaction {
@@ -124,6 +146,48 @@ model OtherIncome {
   @@index([year, term, month])
   @@index([year, term, week])
   @@index([source])
+}
+
+enum FinancialEntryType {
+  INCOME
+  EXPENSE
+}
+
+model FinancialEntry {
+  id        String              @id @default(cuid())
+  type      FinancialEntryType
+  amount    Float               @default(0)
+  year      Int
+  term      Int                 @default(1)
+  month     Int                 @default(1)
+  week      Int?
+  school    String?
+  source    String?
+  category  String?
+  notes     String?
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  @@index([year, term, month])
+  @@index([type])
+  @@index([school])
+  @@index([source])
+  @@index([category])
+}
+
+model BudgetEntry {
+  id        String   @id @default(cuid())
+  year      Int
+  term      Int      @default(1)
+  category  String
+  amount    Float    @default(0)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([year, term, category])
+  @@index([year, term])
+  @@index([category])
 }
 
 model P7PrepPerformance {
@@ -562,6 +626,26 @@ model PLEResult {
   @@index([school])
   @@index([school, year])
   @@index([year])
+}
+
+model Goal {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  category    String    @default("enrollment")
+  targetValue Float
+  currentValue Float   @default(0)
+  unit        String
+  progress    Float    @default(0)
+  year        Int
+  term        Int?
+  status      String   @default("not-started")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([title, year])
+  @@index([year, category])
+  @@index([status])
 }
 
 enum UserRole {

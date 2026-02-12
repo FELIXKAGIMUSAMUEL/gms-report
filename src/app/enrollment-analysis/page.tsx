@@ -28,6 +28,7 @@ export default function EnrollmentAnalysisPage() {
   const [enrollments, setEnrollments] = useState<EnrollmentEnrollment[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [selectedTerm, setSelectedTerm] = useState(1);
   const [compareYears, setCompareYears] = useState<number[]>([currentYear, currentYear - 1]);
 
   useEffect(() => {
@@ -160,6 +161,63 @@ export default function EnrollmentAnalysisPage() {
     return { totalByYear, totalByTerm };
   }, [enrollments]);
 
+  // Term enrollment across multiple years for selected term
+  const termAcrossYears = useMemo(() => {
+    const data: Record<string, any> = {};
+
+    enrollments.forEach(e => {
+      if (e.term === selectedTerm) {
+        if (!data[e.school]) {
+          data[e.school] = { school: e.school };
+        }
+        data[e.school][`year${e.year}`] = (data[e.school][`year${e.year}`] || 0) + e.count;
+      }
+    });
+
+    return Object.values(data).sort((a: any, b: any) => a.school.localeCompare(b.school));
+  }, [enrollments, selectedTerm]);
+
+  // Year-range variance (e.g., 2022-2025, 2024-2025)
+  const yearRangeVariance = useMemo(() => {
+    const schoolYearData: Record<string, Record<number, number>> = {};
+
+    // Build year data for each school
+    availableYears.forEach(year => {
+      enrollments.forEach(e => {
+        if (e.year === year && e.term === selectedTerm) {
+          if (!schoolYearData[e.school]) {
+            schoolYearData[e.school] = {};
+          }
+          schoolYearData[e.school][year] = (schoolYearData[e.school][year] || 0) + e.count;
+        }
+      });
+    });
+
+    // Calculate variance for different period ranges
+    const periods = [
+      { from: availableYears[availableYears.length - 1], to: availableYears[0], label: `${availableYears[availableYears.length - 1]}-${availableYears[0]}` },
+      { from: availableYears[availableYears.length - 2] || availableYears[availableYears.length - 1], to: availableYears[0], label: `${availableYears[availableYears.length - 2] || availableYears[availableYears.length - 1]}-${availableYears[0]}` },
+    ];
+
+    return periods.map(period => ({
+      period: period.label,
+      schools: Object.keys(schoolYearData).map(school => {
+        const startValue = schoolYearData[school][period.from] || 0;
+        const endValue = schoolYearData[school][period.to] || 0;
+        const change = endValue - startValue;
+        const changePercent = startValue > 0 ? ((change / startValue) * 100) : 0;
+
+        return {
+          school,
+          start: startValue,
+          end: endValue,
+          change,
+          changePercent,
+        };
+      }).filter(s => s.start > 0 || s.end > 0),
+    }));
+  }, [enrollments, selectedTerm, availableYears]);
+
   if (status === "loading" || loading) {
     return (
       <DashboardLayout>
@@ -195,9 +253,9 @@ export default function EnrollmentAnalysisPage() {
           </button>
         </div>
 
-        {/* Year Selection */}
+        {/* Year & Term Selection */}
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-semibold text-gray-900 mb-2">Analysis Year</label>
               <select
@@ -208,6 +266,18 @@ export default function EnrollmentAnalysisPage() {
                 {availableYears.map(y => (
                   <option key={y} value={y}>{y}</option>
                 ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-900 mb-2">Selected Term</label>
+              <select
+                value={selectedTerm}
+                onChange={(e) => setSelectedTerm(Number(e.target.value))}
+                className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg text-base font-semibold text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value={1}>Term 1</option>
+                <option value={2}>Term 2</option>
+                <option value={3}>Term 3</option>
               </select>
             </div>
             <div>
@@ -370,6 +440,75 @@ export default function EnrollmentAnalysisPage() {
               <Bar dataKey={`year${compareYears[1]}`} fill="#10b981" name={String(compareYears[1])} />
             </BarChart>
           </ResponsiveContainer>
+        </div>
+
+        {/* Term Enrollment Across Years Chart */}
+        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            Term {selectedTerm} Enrollment by School - Across All Years
+          </h3>
+          <ResponsiveContainer width="100%" height={400}>
+            <BarChart data={termAcrossYears}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis 
+                dataKey="school" 
+                angle={-45} 
+                textAnchor="end" 
+                height={100}
+              />
+              <YAxis />
+              <Tooltip />
+              <Legend />
+              {availableYears.map((year, idx) => (
+                <Bar key={year} dataKey={`year${year}`} fill={['#3b82f6', '#10b981', '#f59e0b', '#ef4444'][idx % 4]} name={String(year)} />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Year-Range Variance Summary */}
+        <div className="space-y-6">
+          {yearRangeVariance.map((variance) => (
+            <div key={variance.period} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-indigo-600 to-blue-600">
+                <h3 className="text-lg font-bold text-white">Enrollment Variance: {variance.period}</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-100">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700">School</th>
+                      <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-blue-50">Start Year</th>
+                      <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-blue-50">End Year</th>
+                      <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-purple-50">Change</th>
+                      <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-purple-50">% Change</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {variance.schools.map((school) => (
+                      <tr key={school.school} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 font-semibold text-gray-900">{school.school}</td>
+                        <td className="px-4 py-3 text-center text-gray-900 font-semibold text-base bg-blue-50">{school.start}</td>
+                        <td className="px-4 py-3 text-center text-gray-900 font-semibold text-base bg-blue-50">{school.end}</td>
+                        <td className="px-4 py-3 text-center bg-purple-50">
+                          <span className={school.change >= 0 ? "text-green-600 font-semibold text-base" : "text-red-600 font-semibold text-base"}>
+                            {school.change > 0 ? "+" : ""}{school.change}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center bg-purple-50">
+                          <div className="flex flex-col items-center gap-1">
+                            <span className={school.change >= 0 ? "text-green-600 font-semibold text-base" : "text-red-600 font-semibold text-base"}>
+                              {school.changePercent > 0 ? "+" : ""}{school.changePercent.toFixed(1)}%
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </DashboardLayout>

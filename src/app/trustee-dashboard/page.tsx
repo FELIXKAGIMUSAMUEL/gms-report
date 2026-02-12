@@ -4,12 +4,14 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
-import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
-import { ArrowUpIcon, ArrowDownIcon, SparklesIcon, ExclamationTriangleIcon, CheckCircleIcon, ClockIcon } from "@heroicons/react/24/outline";
+import { LineChart, Line, BarChart, Bar, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
+import { ArrowUpIcon, ArrowDownIcon, SparklesIcon, ExclamationTriangleIcon, CheckCircleIcon } from "@heroicons/react/24/outline";
 
-interface KPIData {
-  month: number;
+interface WeeklyReport {
+  id: string;
+  weekNumber: number;
   year: number;
+  term: number;
   feesCollectionPercent: number;
   schoolsExpenditurePercent: number;
   infrastructurePercent: number;
@@ -18,17 +20,24 @@ interface KPIData {
   p7PrepExamsPercent: number;
 }
 
-interface TrendData {
-  period: string;
-  value: number;
-  previousValue: number;
-}
+const currentYear = new Date().getFullYear();
+const START_YEAR = 2023;
+const availableYears = Array.from(
+  { length: currentYear - START_YEAR + 1 },
+  (_, i) => currentYear - i
+);
 
 export default function TrusteeDashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [kpiData, setKpiData] = useState<KPIData[]>([]);
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [selectedTerm, setSelectedTerm] = useState(1);
+  const [currentYearReports, setCurrentYearReports] = useState<WeeklyReport[]>([]);
+  const [previousYearReports, setPreviousYearReports] = useState<WeeklyReport[]>([]);
+  const [currentEnrollmentTotal, setCurrentEnrollmentTotal] = useState(0);
+  const [previousEnrollmentTotal, setPreviousEnrollmentTotal] = useState(0);
+  const [currentTheologyTotal, setCurrentTheologyTotal] = useState(0);
+  const [previousTheologyTotal, setPreviousTheologyTotal] = useState(0);
   const [issues, setIssues] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -43,24 +52,71 @@ export default function TrusteeDashboardPage() {
 
   useEffect(() => {
     fetchDashboardData();
-  }, [selectedYear]);
+  }, [selectedYear, selectedTerm]);
 
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const [kpiRes, issuesRes] = await Promise.all([
-        fetch(`/api/kpis?year=${selectedYear}`),
-        fetch(`/api/issues?status=open&limit=5`),
+      const [currentRes, previousRes, currentEnrollmentRes, previousEnrollmentRes, currentTheologyRes, previousTheologyRes, issuesRes] = await Promise.all([
+        fetch(`/api/reports?year=${selectedYear}&term=${selectedTerm}`),
+        fetch(`/api/reports?year=${selectedYear - 1}&term=${selectedTerm}`),
+        fetch(`/api/enrollment?year=${selectedYear}&term=${selectedTerm}`),
+        fetch(`/api/enrollment?year=${selectedYear - 1}&term=${selectedTerm}`),
+        fetch(`/api/theology-enrollment?year=${selectedYear}&term=${selectedTerm}`),
+        fetch(`/api/theology-enrollment?year=${selectedYear - 1}&term=${selectedTerm}`),
+        fetch(`/api/issues?status=ACTIVE`),
       ]);
 
-      if (kpiRes.ok) {
-        const data = await kpiRes.json();
-        setKpiData(Array.isArray(data) ? data : data.data || []);
+      if (currentRes.ok) {
+        const data = await currentRes.json();
+        setCurrentYearReports(Array.isArray(data) ? data : data.data || []);
+      } else {
+        setCurrentYearReports([]);
+      }
+
+      if (previousRes.ok) {
+        const data = await previousRes.json();
+        setPreviousYearReports(Array.isArray(data) ? data : data.data || []);
+      } else {
+        setPreviousYearReports([]);
+      }
+
+      if (currentEnrollmentRes.ok) {
+        const data = await currentEnrollmentRes.json();
+        const rows = Array.isArray(data) ? data : data.data || [];
+        setCurrentEnrollmentTotal(rows.reduce((sum: number, row: any) => sum + (row.count || 0), 0));
+      } else {
+        setCurrentEnrollmentTotal(0);
+      }
+
+      if (previousEnrollmentRes.ok) {
+        const data = await previousEnrollmentRes.json();
+        const rows = Array.isArray(data) ? data : data.data || [];
+        setPreviousEnrollmentTotal(rows.reduce((sum: number, row: any) => sum + (row.count || 0), 0));
+      } else {
+        setPreviousEnrollmentTotal(0);
+      }
+
+      if (currentTheologyRes.ok) {
+        const data = await currentTheologyRes.json();
+        const rows = Array.isArray(data) ? data : data.data || [];
+        setCurrentTheologyTotal(rows.reduce((sum: number, row: any) => sum + (row.count || 0), 0));
+      } else {
+        setCurrentTheologyTotal(0);
+      }
+
+      if (previousTheologyRes.ok) {
+        const data = await previousTheologyRes.json();
+        const rows = Array.isArray(data) ? data : data.data || [];
+        setPreviousTheologyTotal(rows.reduce((sum: number, row: any) => sum + (row.count || 0), 0));
+      } else {
+        setPreviousTheologyTotal(0);
       }
 
       if (issuesRes.ok) {
         const data = await issuesRes.json();
-        setIssues(Array.isArray(data) ? data : data.data || []);
+        const items = Array.isArray(data) ? data : data.data || [];
+        setIssues(items.slice(0, 5));
       }
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
@@ -71,55 +127,102 @@ export default function TrusteeDashboardPage() {
 
   // Calculate summary metrics
   const metrics = useMemo(() => {
-    if (!kpiData.length) return null;
+    if (!currentYearReports.length) return null;
 
-    const currentMonth = kpiData[kpiData.length - 1];
-    const previousMonth = kpiData[kpiData.length - 2];
+    const avg = (reports: WeeklyReport[], selector: (r: WeeklyReport) => number) =>
+      reports.length
+        ? reports.reduce((sum, r) => sum + selector(r), 0) / reports.length
+        : 0;
+
+    const currentFees = avg(currentYearReports, (r) => r.feesCollectionPercent || 0);
+    const previousFees = avg(previousYearReports, (r) => r.feesCollectionPercent || 0);
+
+    const currentEnrollmentReportAvg = avg(currentYearReports, (r) => r.totalEnrollment || 0);
+    const previousEnrollmentReportAvg = avg(previousYearReports, (r) => r.totalEnrollment || 0);
+
+    const currentTheologyReportAvg = avg(currentYearReports, (r) => r.theologyEnrollment || 0);
+    const previousTheologyReportAvg = avg(previousYearReports, (r) => r.theologyEnrollment || 0);
+
+    const currentP7Prep = avg(currentYearReports, (r) => r.p7PrepExamsPercent || 0);
+    const previousP7Prep = avg(previousYearReports, (r) => r.p7PrepExamsPercent || 0);
+
+    const currentExpenditure = avg(currentYearReports, (r) => r.schoolsExpenditurePercent || 0);
+    const previousExpenditure = avg(previousYearReports, (r) => r.schoolsExpenditurePercent || 0);
+
+    const currentInfrastructure = avg(currentYearReports, (r) => r.infrastructurePercent || 0);
+    const previousInfrastructure = avg(previousYearReports, (r) => r.infrastructurePercent || 0);
 
     return {
       fees: {
-        current: currentMonth?.feesCollectionPercent || 0,
-        previous: previousMonth?.feesCollectionPercent || 0,
-        change: (currentMonth?.feesCollectionPercent || 0) - (previousMonth?.feesCollectionPercent || 0),
+        current: currentFees,
+        previous: previousFees,
+        change: currentFees - previousFees,
       },
       enrollment: {
-        current: currentMonth?.totalEnrollment || 0,
-        previous: previousMonth?.totalEnrollment || 0,
-        change: (currentMonth?.totalEnrollment || 0) - (previousMonth?.totalEnrollment || 0),
+        current: currentEnrollmentTotal,
+        previous: previousEnrollmentTotal,
+        change: currentEnrollmentTotal - previousEnrollmentTotal,
+        reportAvg: currentEnrollmentReportAvg,
+        reportPrevAvg: previousEnrollmentReportAvg,
       },
       theology: {
-        current: currentMonth?.theologyEnrollment || 0,
-        previous: previousMonth?.theologyEnrollment || 0,
-        change: (currentMonth?.theologyEnrollment || 0) - (previousMonth?.theologyEnrollment || 0),
+        current: currentTheologyTotal,
+        previous: previousTheologyTotal,
+        change: currentTheologyTotal - previousTheologyTotal,
+        reportAvg: currentTheologyReportAvg,
+        reportPrevAvg: previousTheologyReportAvg,
       },
       p7prep: {
-        current: currentMonth?.p7PrepExamsPercent || 0,
-        previous: previousMonth?.p7PrepExamsPercent || 0,
-        change: (currentMonth?.p7PrepExamsPercent || 0) - (previousMonth?.p7PrepExamsPercent || 0),
+        current: currentP7Prep,
+        previous: previousP7Prep,
+        change: currentP7Prep - previousP7Prep,
       },
       expenditure: {
-        current: currentMonth?.schoolsExpenditurePercent || 0,
-        previous: previousMonth?.schoolsExpenditurePercent || 0,
-        change: (currentMonth?.schoolsExpenditurePercent || 0) - (previousMonth?.schoolsExpenditurePercent || 0),
+        current: currentExpenditure,
+        previous: previousExpenditure,
+        change: currentExpenditure - previousExpenditure,
       },
       infrastructure: {
-        current: currentMonth?.infrastructurePercent || 0,
-        previous: previousMonth?.infrastructurePercent || 0,
-        change: (currentMonth?.infrastructurePercent || 0) - (previousMonth?.infrastructurePercent || 0),
+        current: currentInfrastructure,
+        previous: previousInfrastructure,
+        change: currentInfrastructure - previousInfrastructure,
       },
     };
-  }, [kpiData]);
+  }, [
+    currentYearReports,
+    previousYearReports,
+    currentEnrollmentTotal,
+    previousEnrollmentTotal,
+    currentTheologyTotal,
+    previousTheologyTotal,
+  ]);
 
-  const MetricCard = ({ title, value, unit, change, status }: any) => {
+  const hasKpiData = currentYearReports.length > 0;
+  const chartData = useMemo(
+    () => [...currentYearReports].sort((a, b) => a.weekNumber - b.weekNumber),
+    [currentYearReports]
+  );
+
+  const MetricCard = ({ title, value, unit, change, status, previousValue, compareLabel, secondaryValue, secondaryCompareLabel }: any) => {
     const isPositive = change >= 0;
     const statusColor = status === "good" ? "green" : status === "warning" ? "amber" : "red";
+    const displayValue = typeof value === "number" ? value.toLocaleString() : value;
+    const displayPrevious = typeof previousValue === "number" ? previousValue.toLocaleString() : previousValue;
 
     return (
       <div className={`bg-white rounded-lg shadow p-6 border-l-4 border-${statusColor}-500`}>
         <div className="flex justify-between items-start">
           <div>
             <p className="text-gray-600 text-sm font-medium">{title}</p>
-            <p className="text-3xl font-bold text-gray-900 mt-2">{value.toLocaleString()}{unit}</p>
+            <p className="text-3xl font-bold text-gray-900 mt-2">{displayValue}{unit}</p>
+            <p className="text-xs text-gray-500 mt-1">
+              Last year ({compareLabel}): {displayPrevious}{unit}
+            </p>
+            {secondaryValue !== undefined && secondaryValue !== null && (
+              <p className="text-xs text-gray-500 mt-1">
+                Weekly report avg ({secondaryCompareLabel}): {typeof secondaryValue === "number" ? secondaryValue.toFixed(1) : secondaryValue}{unit}
+              </p>
+            )}
           </div>
           <div className={`p-3 rounded-lg ${statusColor === "green" ? "bg-green-100" : statusColor === "amber" ? "bg-amber-100" : "bg-red-100"}`}>
             {statusColor === "green" && <CheckCircleIcon className={`w-6 h-6 text-green-600`} />}
@@ -162,18 +265,33 @@ export default function TrusteeDashboardPage() {
           <p className="text-gray-600 mt-1">High-level overview and key insights for governance</p>
         </div>
 
-        {/* Year Filter */}
-        <div className="mb-6">
+        {/* Year/Term Filters */}
+        <div className="mb-6 flex flex-wrap gap-3">
           <select
             value={selectedYear}
             onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            className="px-4 py-2 border-2 border-gray-400 rounded-lg text-base font-medium text-gray-900 bg-white shadow-sm hover:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
-            {[2024, 2025, 2026].map((year) => (
+            {availableYears.map((year) => (
               <option key={year} value={year}>{year}</option>
             ))}
           </select>
+          <select
+            value={selectedTerm}
+            onChange={(e) => setSelectedTerm(parseInt(e.target.value))}
+            className="px-4 py-2 border-2 border-gray-400 rounded-lg text-base font-medium text-gray-900 bg-white shadow-sm hover:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            {[1, 2, 3].map((term) => (
+              <option key={term} value={term}>Term {term}</option>
+            ))}
+          </select>
         </div>
+
+        {!hasKpiData && (
+          <div className="mb-8 rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-900">
+            No weekly report data available for Term {selectedTerm}, {selectedYear}. Add weekly reports for this term to populate metrics and charts.
+          </div>
+        )}
 
         {/* Key Metrics */}
         {metrics && (
@@ -183,6 +301,8 @@ export default function TrusteeDashboardPage() {
               value={metrics.fees.current.toFixed(1)}
               unit="%"
               change={metrics.fees.change}
+              previousValue={metrics.fees.previous.toFixed(1)}
+              compareLabel={`Term ${selectedTerm}, ${selectedYear - 1}`}
               status={metrics.fees.current >= 85 ? "good" : metrics.fees.current >= 70 ? "warning" : "critical"}
             />
             <MetricCard
@@ -190,6 +310,10 @@ export default function TrusteeDashboardPage() {
               value={metrics.enrollment.current}
               unit=" students"
               change={metrics.enrollment.change}
+              previousValue={metrics.enrollment.previous}
+              compareLabel={`Term ${selectedTerm}, ${selectedYear - 1}`}
+              secondaryValue={metrics.enrollment.reportAvg}
+              secondaryCompareLabel={`Term ${selectedTerm}, ${selectedYear}`}
               status={metrics.enrollment.change >= 0 ? "good" : "warning"}
             />
             <MetricCard
@@ -197,6 +321,10 @@ export default function TrusteeDashboardPage() {
               value={metrics.theology.current}
               unit=" students"
               change={metrics.theology.change}
+              previousValue={metrics.theology.previous}
+              compareLabel={`Term ${selectedTerm}, ${selectedYear - 1}`}
+              secondaryValue={metrics.theology.reportAvg}
+              secondaryCompareLabel={`Term ${selectedTerm}, ${selectedYear}`}
               status={metrics.theology.change >= 0 ? "good" : "warning"}
             />
             <MetricCard
@@ -204,6 +332,8 @@ export default function TrusteeDashboardPage() {
               value={metrics.p7prep.current.toFixed(1)}
               unit="%"
               change={metrics.p7prep.change}
+              previousValue={metrics.p7prep.previous.toFixed(1)}
+              compareLabel={`Term ${selectedTerm}, ${selectedYear - 1}`}
               status={metrics.p7prep.current >= 80 ? "good" : metrics.p7prep.current >= 60 ? "warning" : "critical"}
             />
             <MetricCard
@@ -211,6 +341,8 @@ export default function TrusteeDashboardPage() {
               value={metrics.expenditure.current.toFixed(1)}
               unit="%"
               change={metrics.expenditure.change}
+              previousValue={metrics.expenditure.previous.toFixed(1)}
+              compareLabel={`Term ${selectedTerm}, ${selectedYear - 1}`}
               status={metrics.expenditure.current <= 100 ? "good" : "warning"}
             />
             <MetricCard
@@ -218,49 +350,53 @@ export default function TrusteeDashboardPage() {
               value={metrics.infrastructure.current.toFixed(1)}
               unit="%"
               change={metrics.infrastructure.change}
+              previousValue={metrics.infrastructure.previous.toFixed(1)}
+              compareLabel={`Term ${selectedTerm}, ${selectedYear - 1}`}
               status={metrics.infrastructure.current >= 70 ? "good" : "warning"}
             />
           </div>
         )}
 
         {/* Charts Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* Fees Collection Trend */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Fees Collection Trend</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={kpiData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip />
-                <Line
-                  type="monotone"
-                  dataKey="feesCollectionPercent"
-                  stroke="#3b82f6"
-                  dot={{ fill: "#3b82f6" }}
-                  name="Fees Collection %"
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+        {hasKpiData && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            {/* Fees Collection Trend */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Fees Collection Trend</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="weekNumber" tickFormatter={(value) => `WK ${value}`} />
+                  <YAxis />
+                  <Tooltip />
+                  <Line
+                    type="monotone"
+                    dataKey="feesCollectionPercent"
+                    stroke="#3b82f6"
+                    dot={{ fill: "#3b82f6" }}
+                    name="Fees Collection %"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
 
-          {/* Enrollment Trend */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Enrollment Trends</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={kpiData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="totalEnrollment" fill="#10b981" name="Regular" />
-                <Bar dataKey="theologyEnrollment" fill="#8b5cf6" name="Theology" />
-              </BarChart>
-            </ResponsiveContainer>
+            {/* Enrollment Trend */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Enrollment Trends</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="weekNumber" tickFormatter={(value) => `WK ${value}`} />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="totalEnrollment" fill="#10b981" name="Regular" />
+                  <Bar dataKey="theologyEnrollment" fill="#8b5cf6" name="Theology" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Critical Issues Section */}
         <div className="bg-white rounded-lg shadow p-6">
@@ -284,19 +420,15 @@ export default function TrusteeDashboardPage() {
               {issues.map((issue) => (
                 <div key={issue.id} className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
                   <div className="flex-1">
-                    <p className="font-semibold text-gray-900">{issue.title}</p>
-                    <p className="text-sm text-gray-600 mt-1">{issue.description}</p>
+                    <p className="font-semibold text-gray-900">{issue.issue}</p>
                     <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                      <span>School: {issue.school || "All"}</span>
+                      <span>In charge: {issue.inCharge || "Unassigned"}</span>
+                      <span>Status: {issue.status || "OPEN"}</span>
                       <span>Created: {new Date(issue.createdAt).toLocaleDateString()}</span>
                     </div>
                   </div>
-                  <div className={`px-2 py-1 rounded text-xs font-semibold ${
-                    issue.priority === "high" ? "bg-red-200 text-red-800" :
-                    issue.priority === "medium" ? "bg-amber-200 text-amber-800" :
-                    "bg-blue-200 text-blue-800"
-                  }`}>
-                    {issue.priority?.toUpperCase() || "MEDIUM"}
+                  <div className="px-2 py-1 rounded text-xs font-semibold bg-red-200 text-red-800">
+                    ATTENTION
                   </div>
                 </div>
               ))}
@@ -306,13 +438,6 @@ export default function TrusteeDashboardPage() {
 
         {/* Quick Actions */}
         <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <a
-            href="/trustee-scorecard"
-            className="bg-blue-50 border border-blue-200 rounded-lg p-4 hover:bg-blue-100 transition-colors"
-          >
-            <h4 className="font-semibold text-blue-900">School Rankings</h4>
-            <p className="text-sm text-blue-700 mt-1">View performance scorecard</p>
-          </a>
           <a
             href="/trustee-financial"
             className="bg-green-50 border border-green-200 rounded-lg p-4 hover:bg-green-100 transition-colors"

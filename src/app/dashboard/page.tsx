@@ -49,6 +49,8 @@ interface WeeklyReport {
 	syllabusCoveragePercent: number;
 	admissions: number;
 	term?: number;
+	createdAt?: string;
+	updatedAt?: string;
 }
 
 interface WeeklyScorecard {
@@ -160,6 +162,15 @@ interface Todo {
 	updatedAt: string;
 }
 
+interface TermSetting {
+	id: string;
+	term: number;
+	year: number;
+	startDate: string;
+	endDate: string;
+	weeksCount: number;
+}
+
 const currentYear = new Date().getFullYear();
 const COLORS = ["#3b82f6", "#8b5cf6", "#ec4899", "#f97316", "#eab308"];
 
@@ -172,6 +183,22 @@ const daysUntil = (dateStr: string) => {
 	const target = new Date(dateStr);
 	target.setHours(0, 0, 0, 0);
 	return Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+};
+
+const getLatestTimestamp = (items: any[], keys: string[]) => {
+	let latest: Date | null = null;
+	items.forEach((item) => {
+		keys.forEach((key) => {
+			const value = item?.[key];
+			if (!value) return;
+			const date = new Date(value);
+			if (isNaN(date.getTime())) return;
+			if (!latest || date > latest) {
+				latest = date;
+			}
+		});
+	});
+	return latest;
 };
 
 export default function Dashboard() {
@@ -193,6 +220,7 @@ export default function Dashboard() {
 	const [issues, setIssues] = useState<RedIssue[]>([]);
 	const [events, setEvents] = useState<UpcomingEvent[]>([]);
 	const [projects, setProjects] = useState<GMProject[]>([]);
+	const [savingProjectIds, setSavingProjectIds] = useState<Set<string>>(new Set());
 	const [incomes, setIncomes] = useState<OtherIncome[]>([]);
 	const [incomeSources, setIncomeSources] = useState<IncomeSource[]>([]);
 	const [theologyEnrollments, setTheologyEnrollments] = useState<any[]>([]);
@@ -204,6 +232,7 @@ export default function Dashboard() {
 	const [reactions, setReactions] = useState<Reaction[]>([]);
 	const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
 	const [postingReaction, setPostingReaction] = useState<Record<string, boolean>>({});
+	const [termSettings, setTermSettings] = useState<TermSetting[]>([]);
 	const [p7YearsWindow, setP7YearsWindow] = useState<number>(999); // Default to all years
 	const [p7ChartType, setP7ChartType] = useState<"line" | "bar">("line"); // Chart type toggle
 	const [enrollmentSchoolFilter, setEnrollmentSchoolFilter] = useState<string>("ALL"); // School filter for enrollment chart
@@ -228,7 +257,7 @@ export default function Dashboard() {
 	const [todos, setTodos] = useState<Todo[]>([]);
 	const [newTodo, setNewTodo] = useState({ title: "", description: "", dueDate: "", priority: "MEDIUM", category: "GENERAL" });
 	const [showTodoForm, setShowTodoForm] = useState(false);
-	const [projectStatusFilter, setProjectStatusFilter] = useState<"ALL" | "OPEN" | "IN_PROGRESS" | "COMPLETED">("ALL");
+	const [projectStatusFilter, setProjectStatusFilter] = useState<"ALL" | "ACTIVE" | "COMPLETED">("ALL");
 	const [issueStatusFilter, setIssueStatusFilter] = useState<"ALL" | "OPEN" | "IN_PROGRESS" | "RESOLVED">("ALL");
 	const [issueAssigneeFilter, setIssueAssigneeFilter] = useState<string>("ALL");
 	const [issueSort, setIssueSort] = useState<"NEWEST" | "OLDEST" | "LONGEST_OPEN">("NEWEST");
@@ -305,7 +334,7 @@ export default function Dashboard() {
 				term: String(prevTerm),
 			});
 
-const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sourcesRes, incomesRes, theologyRes, previousTheologyRes, enrollmentRes, previousEnrollmentRes, reactionsRes, todosRes, p7PrepRes, p7PleRes, p6PromotionRes] = await Promise.all([
+			const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sourcesRes, incomesRes, theologyRes, previousTheologyRes, enrollmentRes, previousEnrollmentRes, reactionsRes, todosRes, p7PrepRes, p7PleRes, p6PromotionRes, termSettingsRes] = await Promise.all([
 			fetch("/api/reports"),
 			fetch(`/api/scorecard?${scorecardsParams.toString()}`),
 			fetch("/api/p7-prep"),
@@ -323,6 +352,7 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 			fetch("/api/p7-prep-results", { cache: "no-store" }),
 			fetch("/api/p7-ple-results", { cache: "no-store" }),
 			fetch("/api/p6-promotion-results", { cache: "no-store" }),
+				fetch("/api/settings/term"),
 			]);
 
 			if (!reportsRes.ok) throw new Error("Failed to fetch reports");
@@ -346,6 +376,7 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 			const previousEnrollmentData = previousEnrollmentRes.ok ? await previousEnrollmentRes.json() : [];
 			const reactionsData = reactionsRes.ok ? await reactionsRes.json() : [];
 			const todosData = todosRes.ok ? await todosRes.json() : [];
+			const termSettingsData = termSettingsRes.ok ? await termSettingsRes.json() : { termSettings: [] };
 
 			const currentTheologyTotal = Array.isArray(theologyData) ? theologyData.reduce((sum: number, e: any) => sum + e.count, 0) : 0;
 			const previousTheologyTotal = Array.isArray(previousTheologyData) ? previousTheologyData.reduce((sum: number, e: any) => sum + e.count, 0) : 0;
@@ -394,6 +425,7 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 				setPreviousEnrollments(Array.isArray(previousEnrollmentData) ? previousEnrollmentData : []);
 				setReactions(Array.isArray(reactionsData) ? reactionsData : reactionsData.data || []);
 				setTodos(Array.isArray(todosData) ? todosData : todosData.data || []);
+				setTermSettings(Array.isArray(termSettingsData.termSettings) ? termSettingsData.termSettings : []);
 			} catch (err) {
 				console.error(err);
 				setError(err instanceof Error ? err.message : "Failed to load dashboard data");
@@ -410,6 +442,39 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 	const handleRefresh = useCallback(() => {
 		setIsRefreshing(true);
 		setRefreshTick(prev => prev + 1);
+	}, []);
+
+	const handleProjectProgressUpdate = useCallback(async (projectId: string, newProgress: number) => {
+		setProjects((prev) => prev.map((project) =>
+			project.id === projectId ? { ...project, progress: newProgress } : project
+		));
+		setSavingProjectIds((prev) => new Set(prev).add(projectId));
+
+		try {
+			const response = await fetch("/api/projects", {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ id: projectId, progress: newProgress }),
+			});
+
+			if (!response.ok) {
+				setError("Failed to update project progress.");
+				setRefreshTick((prev) => prev + 1);
+				setTimeout(() => setError(null), 3000);
+			}
+		} catch (err) {
+			setError("Connection error. Project progress reverted.");
+			setRefreshTick((prev) => prev + 1);
+			setTimeout(() => setError(null), 3000);
+		} finally {
+			setTimeout(() => {
+				setSavingProjectIds((prev) => {
+					const next = new Set(prev);
+					next.delete(projectId);
+					return next;
+				});
+			}, 400);
+		}
 	}, []);
 
 	useEffect(() => {
@@ -441,27 +506,66 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 		fetchTrendData();
 	}, []); // Only fetch once on mount
 
+	const getCurrentTermSelection = useCallback(() => {
+		if (!termSettings.length) return null;
+
+		const today = new Date();
+		today.setHours(0, 0, 0, 0);
+
+		const activeTerm = termSettings.find((setting) => {
+			const start = new Date(setting.startDate);
+			const end = new Date(setting.endDate);
+			start.setHours(0, 0, 0, 0);
+			end.setHours(0, 0, 0, 0);
+			return today >= start && today <= end;
+		});
+
+		if (!activeTerm) return null;
+
+		const start = new Date(activeTerm.startDate);
+		start.setHours(0, 0, 0, 0);
+		const diffDays = Math.floor((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+		const rawWeek = Math.floor(diffDays / 7) + 1;
+		const weeksCount = activeTerm.weeksCount || 13;
+		const week = Math.min(Math.max(rawWeek, 1), weeksCount);
+
+		return {
+			year: activeTerm.year,
+			term: activeTerm.term,
+			week,
+		};
+	}, [termSettings]);
+
 	useEffect(() => {
 		if (selectionInitialized) return;
+
+		const currentTermSelection = getCurrentTermSelection();
+		if (currentTermSelection) {
+			setSelectedYear(currentTermSelection.year);
+			setSelectedTerm(currentTermSelection.term);
+			setSelectedWeek(currentTermSelection.week);
+			setSelectionInitialized(true);
+			return;
+		}
 
 		const latestReport = [...reports].sort((a, b) => b.year - a.year || b.weekNumber - a.weekNumber)[0];
 		const latestScorecard = [...scorecards].sort((a, b) => b.year - a.year || b.week - a.week)[0];
 
-			if (latestReport) {
-				setSelectedYear(latestReport.year);
-				setSelectedWeek(latestReport.weekNumber);
-				if (latestReport.term) {
-					setSelectedTerm(latestReport.term);
-				}
-				setSelectionInitialized(true);
-			} else if (latestScorecard) {
-				setSelectedYear(latestScorecard.year);
-				setSelectedWeek(latestScorecard.week);
-				setSelectedTerm(latestScorecard.term || 1);
-				setSelectionInitialized(true);
+		if (latestReport) {
+			setSelectedYear(latestReport.year);
+			setSelectedWeek(latestReport.weekNumber);
+			if (latestReport.term) {
+				setSelectedTerm(latestReport.term);
 			}
-			// If no data yet, do not mark initialized; wait for fetch to complete
-	}, [reports, scorecards, selectionInitialized]);
+			setSelectionInitialized(true);
+		} else if (latestScorecard) {
+			setSelectedYear(latestScorecard.year);
+			setSelectedWeek(latestScorecard.week);
+			setSelectedTerm(latestScorecard.term || 1);
+			setSelectionInitialized(true);
+		}
+		// If no data yet, do not mark initialized; wait for fetch to complete
+	}, [reports, scorecards, selectionInitialized, getCurrentTermSelection]);
 
 	const filteredReports = useMemo(() => {
 		const sorted = [...reports].sort((a, b) => b.year - a.year || b.weekNumber - a.weekNumber);
@@ -475,6 +579,62 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 
 	const currentReport = filteredReports[0];
 	const currentReportId = currentReport?.id;
+
+	const latestDataTimestamp = useMemo(() => {
+		const candidates: (Date | null)[] = [];
+		const reportTimestamp = currentReport?.updatedAt || currentReport?.createdAt;
+		if (reportTimestamp) {
+			const parsed = new Date(reportTimestamp);
+			if (!isNaN(parsed.getTime())) {
+				candidates.push(parsed);
+			}
+		}
+
+		candidates.push(
+			getLatestTimestamp(reports, ["updatedAt", "createdAt"]),
+			getLatestTimestamp(scorecards, ["updatedAt", "createdAt"]),
+			getLatestTimestamp(enrollments, ["updatedAt", "createdAt"]),
+			getLatestTimestamp(allEnrollments, ["updatedAt", "createdAt"]),
+			getLatestTimestamp(theologyEnrollments, ["updatedAt", "createdAt"]),
+			getLatestTimestamp(allTheologyEnrollments, ["updatedAt", "createdAt"]),
+			getLatestTimestamp(issues, ["updatedAt", "createdAt", "resolvedAt"]),
+			getLatestTimestamp(events, ["updatedAt", "createdAt"]),
+			getLatestTimestamp(projects, ["updatedAt", "createdAt"]),
+			getLatestTimestamp(incomes, ["updatedAt", "createdAt"]),
+			getLatestTimestamp(incomeSources, ["updatedAt", "createdAt"]),
+			getLatestTimestamp(reactions, ["updatedAt", "createdAt"]),
+			getLatestTimestamp(todos, ["updatedAt", "createdAt", "completedAt", "deferredUntil"]),
+			getLatestTimestamp(p7Data, ["updatedAt", "createdAt"]),
+			getLatestTimestamp(p7PrepResults, ["updatedAt", "createdAt"]),
+			getLatestTimestamp(p7PleResults, ["updatedAt", "createdAt"]),
+			getLatestTimestamp(p6PromotionResults, ["updatedAt", "createdAt"])
+		);
+
+		return candidates.filter(Boolean).sort((a, b) => b!.getTime() - a!.getTime())[0] ?? null;
+	}, [
+		currentReport,
+		reports,
+		scorecards,
+		enrollments,
+		allEnrollments,
+		theologyEnrollments,
+		allTheologyEnrollments,
+		issues,
+		events,
+		projects,
+		incomes,
+		incomeSources,
+		reactions,
+		todos,
+		p7Data,
+		p7PrepResults,
+		p7PleResults,
+		p6PromotionResults,
+	]);
+
+	useEffect(() => {
+		setLastUpdated(latestDataTimestamp);
+	}, [latestDataTimestamp]);
 
 	const previousWeekReport = useMemo(() => {
 		const targetWeek = selectedWeek - 1;
@@ -800,11 +960,9 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 		if (projectStatusFilter !== "ALL") {
 			list = list.filter(p => {
 				const status = p.status || "ACTIVE";
-				// Map database status to filter values
-				if (projectStatusFilter === "COMPLETED") return status === "COMPLETED";
-				if (projectStatusFilter === "OPEN") return status === "ACTIVE";
-				if (projectStatusFilter === "IN_PROGRESS") return status === "ACTIVE";
-				return true;
+				return projectStatusFilter === "COMPLETED"
+					? status === "COMPLETED"
+					: status === "ACTIVE";
 			});
 		}
 		return list.sort((a, b) => (b.progress ?? 0) - (a.progress ?? 0) || a.projectName.localeCompare(b.projectName));
@@ -1632,7 +1790,7 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 					</div>
 				</div>
 
-				<div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-10">
+				<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-5 mb-10">
 					{kpiMetrics.map((metric, idx) => {
 						const trend = metric.value - metric.lastValue;
 						const isTheology = metric.sectionId === "theology-enrollment";
@@ -1672,13 +1830,13 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 						return (
 							<div
 								key={idx}
-								className={`bg-white p-6 rounded-xl shadow-sm border transition-all hover:shadow-md hover:-translate-y-0.5 ${
+								className={`bg-white p-4 md:p-5 rounded-xl shadow-sm border transition-all hover:shadow-md hover:-translate-y-0.5 ${
 									targetMet ? "border-green-300 bg-gradient-to-b from-green-50/60 to-white" : "border-gray-100"
 								}`}
 							>
-								<div className="flex items-start justify-between mb-4">
+								<div className="flex items-start justify-between mb-3">
 									<div className="flex items-center gap-2">
-										<span className="px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-200">
+										<span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-700 border border-gray-200">
 											{metric.label}
 										</span>
 										{targetMet && (
@@ -1723,15 +1881,15 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 									</div>
 								</div>
 
-									<div className="flex items-end justify-between mb-3">
-								<p className="text-4xl font-semibold text-gray-900 leading-none">
+									<div className="flex items-end justify-between mb-2">
+										<p className="text-2xl sm:text-3xl font-semibold text-gray-900 leading-tight">
 									{metric.value}{metric.label.includes('%') || ['Fees Collection', 'Expenditure %', 'Infrastructure %', 'P7 Prep %', 'Syllabus %'].includes(metric.label) ? '%' : ''}
 								</p>
-								{hasTarget && <span className="text-xs font-semibold text-gray-600">Target {metric.target}{metric.label.includes('%') || ['Fees Collection', 'Expenditure %', 'Infrastructure %', 'P7 Prep %', 'Syllabus %'].includes(metric.label) ? '%' : ''}</span>}
+										{hasTarget && <span className="text-[11px] font-semibold text-gray-600">Target {metric.target}{metric.label.includes('%') || ['Fees Collection', 'Expenditure %', 'Infrastructure %', 'P7 Prep %', 'Syllabus %'].includes(metric.label) ? '%' : ''}</span>}
 
 				</div>
 								{hasTarget && (
-									<div className="mt-2 mb-4">
+										<div className="mt-2 mb-3">
 										<div className="flex items-center justify-between mb-1 text-xs text-gray-600">
 											<span>Progress</span>
 											<span className={targetMet ? "text-green-700 font-semibold" : "font-semibold text-gray-700"}>
@@ -2871,7 +3029,7 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 																		value={draft}
 																		onChange={(e) => setCommentDrafts(prev => ({ ...prev, [sectionId]: e.target.value }))}
 																		placeholder="Add a comment"
-																		className="flex-1 px-2 py-1 text-xs border rounded"
+																		className="flex-1 px-2 py-1 text-xs text-gray-900 border rounded"
 																	/>
 																	<button
 																		disabled={!draft.trim() || isPostingComment}
@@ -2909,8 +3067,7 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 									className="border rounded-lg px-3 py-2 text-sm font-bold text-gray-900 bg-white focus:ring-2 focus:ring-blue-500"
 								>
 									<option value="ALL">All</option>
-									<option value="OPEN">Open</option>
-									<option value="IN_PROGRESS">In Progress</option>
+										<option value="ACTIVE">Active</option>
 									<option value="COMPLETED">Completed</option>
 								</select>
 							</div>
@@ -2979,6 +3136,9 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 													}`}>
 														{project.progress}%
 													</span>
+													{isGM && savingProjectIds.has(project.id) && (
+														<span className="text-[10px] font-semibold text-blue-600">Saving...</span>
+													)}
 												</div>
 												<div className="relative w-full bg-gray-200 rounded-full h-3 overflow-hidden shadow-inner">
 													<div
@@ -2989,6 +3149,32 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 													</div>
 												</div>
 											</div>
+
+											{isGM && (
+												<div className="mt-3">
+													<div className="flex items-center gap-3">
+														<input
+															type="range"
+															min={0}
+															max={100}
+															value={project.progress}
+															onChange={(e) => handleProjectProgressUpdate(project.id, Number(e.target.value))}
+															className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+															disabled={savingProjectIds.has(project.id)}
+														/>
+														<input
+															type="number"
+															min={0}
+															max={100}
+															value={project.progress}
+															onChange={(e) => handleProjectProgressUpdate(project.id, Number(e.target.value))}
+															className="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-gray-900"
+															disabled={savingProjectIds.has(project.id)}
+														/>
+														<span className="text-xs text-gray-500">%</span>
+													</div>
+												</div>
+											)}
 
 											{/* Trustee Reactions */}
 											{isTrustee && (
@@ -3047,7 +3233,7 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 																	value={draft}
 																	onChange={(e) => setCommentDrafts(prev => ({ ...prev, [sectionId]: e.target.value }))}
 																	placeholder="Add a comment"
-																	className="flex-1 px-2 py-1 text-xs border rounded"
+																	className="flex-1 px-2 py-1 text-xs text-gray-900 border rounded"
 																/>
 																<button
 																	disabled={!draft.trim() || isPostingComment}
@@ -3377,7 +3563,7 @@ const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sour
 																					value={draft}
 																					onChange={(e) => setCommentDrafts(prev => ({ ...prev, [sectionId]: e.target.value }))}
 																					placeholder="Add a comment"
-																					className="flex-1 px-2 py-1 text-xs border rounded"
+																					className="flex-1 px-2 py-1 text-xs text-gray-900 border rounded"
 																				/>
 																				<button
 																					disabled={!draft.trim() || isPostingComment}
