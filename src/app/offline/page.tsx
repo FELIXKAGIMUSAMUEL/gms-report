@@ -43,7 +43,7 @@ export default function OfflinePage() {
 
           {/* Title */}
           <h1 className="text-3xl font-bold text-gray-900 mb-3">
-            You're Offline
+            You&apos;re Offline
           </h1>
 
           {/* Status Message */}
@@ -98,7 +98,7 @@ export default function OfflinePage() {
 
           {/* Help Text */}
           <p className="text-xs text-gray-500 mt-6">
-            Tip: Once you're back online, all your offline actions will sync automatically.
+            Tip: Once you&apos;re back online, all your offline actions will sync automatically.
           </p>
         </div>
 

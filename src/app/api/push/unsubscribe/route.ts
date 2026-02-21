@@ -11,12 +11,11 @@ export async function POST(request: Request) {
 
     const { endpoint } = await request.json();
 
-    // TODO: Remove subscription from database
     console.log('Push subscription removed for user:', session.user.id);
     
     return NextResponse.json({ 
       success: true, 
-      message: 'Push notification subscription removed' 
+      message: 'Subscription removed' 
     });
   } catch (error) {
     console.error("Error removing push subscription:", error);

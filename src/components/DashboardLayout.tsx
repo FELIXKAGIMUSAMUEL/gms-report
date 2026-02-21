@@ -1,9 +1,3 @@
-/**
- * GMS Report System - Dashboard Layout Component
- * Copyright (c) 2026 Mustafa - Sir Apollo Kaggwa Schools
- * All rights reserved.
- */
-
 "use client";
 
 import { useSession, signOut } from "next-auth/react";
@@ -36,6 +30,8 @@ import {
   XMarkIcon,
   ChevronDownIcon,
   ChevronUpIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   ChartBarIcon,
   CalendarIcon,
   RocketLaunchIcon,
@@ -48,12 +44,15 @@ import {
   SparklesIcon,
   UserCircleIcon,
   UserGroupIcon,
+  ArrowsPointingOutIcon,
+  ArrowsPointingInIcon,
 } from "@heroicons/react/24/outline";
 import NotificationBell from "./NotificationBell";
 import MessagingDrawer from "./MessagingDrawer";
 import GlobalSearch from "./GlobalSearch";
 import AlertsPanel from "./AlertsPanel";
 import PushNotificationManager from "./PushNotificationManager";
+import PWAInstallPrompt from "./PWAInstallPrompt";
 
 interface LayoutProps {
   children: ReactNode;
@@ -92,6 +91,35 @@ export default function DashboardLayout({
   const [scorecardOpen, setScorecarOpen] = useState(pathname.includes("scorecard"));
   const [messagingOpen, setMessagingOpen] = useState(false);
   const [unreadMessages, setUnreadMessages] = useState(0);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("sidebar-collapsed") === "true";
+    }
+    return false;
+  });
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Fullscreen change listener
+  useEffect(() => {
+    const handler = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", handler);
+    return () => document.removeEventListener("fullscreenchange", handler);
+  }, []);
+
+  const toggleSidebar = () => {
+    const next = !sidebarCollapsed;
+    setSidebarCollapsed(next);
+    localStorage.setItem("sidebar-collapsed", String(next));
+  };
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  };
 
   // Check session validity on mount and periodically
   useEffect(() => {
@@ -217,6 +245,7 @@ export default function DashboardLayout({
   const enrollmentSections = isGM ? [
     { name: "Enrollment Tracking", href: "/enrollment-entry", icon: DocumentPlusIcon, description: "Enter enrollment numbers for each school by class and term" },
     { name: "Enrollment Analysis", href: "/enrollment-analysis", icon: ChartBarIcon, description: "Detailed trends, comparisons, and variance analysis" },
+    { name: "Enrollment Types", href: "/enrollment-types", icon: DocumentPlusIcon, description: "Manage custom enrollment categories (Swimming, Tours, etc.)" },
   ] : [
     { name: "Enrollment Analysis", href: "/enrollment-analysis", icon: ChartBarIcon, description: "Detailed trends, comparisons, and variance analysis" },
   ];
@@ -251,18 +280,29 @@ export default function DashboardLayout({
       <nav className="bg-white border-b border-gray-200 shadow-sm z-30">
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center min-h-16 py-2 gap-3 sm:gap-4">
-            {/* Left: Logo and Mobile Menu Button */}
-            <div className="flex items-center gap-4 min-w-0 flex-wrap sm:flex-nowrap">
+            {/* Left: Logo, Mobile Menu Button, and Mobile Filter Button */}
+            <div className="flex items-center gap-2 min-w-0 flex-wrap sm:flex-nowrap">
               <button
                 onClick={() => setSidebarOpen(true)}
                 className="md:hidden p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
               >
                 <Bars3Icon className="h-6 w-6" />
               </button>
+              {showPeriodFilters && (
+                <button
+                  onClick={() => setMobileFiltersOpen(v => !v)}
+                  className="lg:hidden flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors text-xs font-semibold border border-gray-200"
+                  title="Period filters"
+                >
+                  <CalendarIcon className="h-4 w-4 text-blue-600" />
+                  <span>Y{activeYear} T{activeTerm} W{activeWeek}</span>
+                  {mobileFiltersOpen ? <ChevronUpIcon className="h-3 w-3" /> : <ChevronDownIcon className="h-3 w-3" />}
+                </button>
+              )}
               
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center shadow-md">
-                  <span className="text-white font-bold text-base sm:text-xl leading-none">{userRole === "TRUSTEE" ? "TR" : "GM"}</span>
+                <div className="w-10 h-10 rounded-lg overflow-hidden shadow-md flex-shrink-0">
+                  <img src="/sak.jpg" alt="SAK" className="w-full h-full object-contain" />
                 </div>
                 <div className="hidden sm:block min-w-0">
                   <h1 className="text-sm sm:text-base md:text-lg font-bold text-gray-900 truncate max-w-[14rem] lg:max-w-none">{portalTitle}</h1>
@@ -343,23 +383,55 @@ export default function DashboardLayout({
                 )}
               </button>
 
-              {/* User Profile */}
-              <a
-                href="/profile"
-                className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
-                title="Edit Profile"
-              >
-                <div className="hidden sm:block text-right">
-                  <p className="text-sm font-semibold text-gray-900">{session.user.name}</p>
-                  <p className="text-xs text-gray-500">{session.user.role}</p>
-                </div>
-                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-base sm:text-lg shadow-md ring-2 ring-white">
-                  {session.user.name?.[0]}
-                </div>
-              </a>
-            </div>
+	            </div>
           </div>
         </div>
+        {/* Mobile period filter panel */}
+        {showPeriodFilters && mobileFiltersOpen && (
+          <div className="lg:hidden border-t border-gray-200 bg-gray-50 px-4 py-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <CalendarIcon className="w-4 h-4 text-blue-600" />
+                <label className="text-xs font-bold text-gray-700">Year</label>
+                <select
+                  value={activeYear}
+                  onChange={(e) => handleYearChange(parseInt(e.target.value))}
+                  className="px-2 py-1.5 text-sm font-bold text-gray-900 bg-white border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {[2024, 2025, 2026].map((year) => (
+                    <option key={year} value={year}>{year}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <SparklesIcon className="w-4 h-4 text-purple-600" />
+                <label className="text-xs font-bold text-gray-700">Term</label>
+                <select
+                  value={activeTerm}
+                  onChange={(e) => handleTermChange(parseInt(e.target.value))}
+                  className="px-2 py-1.5 text-sm font-bold text-gray-900 bg-white border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value={1}>Term 1</option>
+                  <option value={2}>Term 2</option>
+                  <option value={3}>Term 3</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <ClockIcon className="w-4 h-4 text-green-600" />
+                <label className="text-xs font-bold text-gray-700">Week</label>
+                <select
+                  value={activeWeek}
+                  onChange={(e) => handleWeekChange(parseInt(e.target.value))}
+                  className="px-2 py-1.5 text-sm font-bold text-gray-900 bg-white border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {Array.from({ length: 13 }, (_, i) => i + 1).map((week) => (
+                    <option key={week} value={week}>Week {week}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
       </nav>
 
       <div className="flex-1 flex overflow-hidden">
@@ -538,8 +610,12 @@ export default function DashboardLayout({
           <div className="p-4 border-t">
             <div className="flex items-center mb-3">
               <div className="flex-shrink-0">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold">
-                  {session.user.name?.[0]}
+                <div className="w-10 h-10 rounded-full overflow-hidden ring-2 ring-white shadow">
+                  <img
+                    src={session.user.avatarUrl || "/User_Avatar.png"}
+                    alt={session.user.name ?? ""}
+                    className="w-full h-full object-cover"
+                  />
                 </div>
               </div>
               <div className="ml-3">
@@ -566,11 +642,36 @@ export default function DashboardLayout({
       </div>
 
       {/* Desktop sidebar */}
-      <div className="hidden md:flex md:flex-shrink-0">
-        <div className="flex flex-col w-64">
+      <div className={`hidden md:flex md:flex-shrink-0 transition-all duration-300 ${sidebarCollapsed ? "w-16" : "w-64"}`}>
+        <div className="flex flex-col w-full">
           <div className="flex flex-col h-full bg-white border-r border-gray-200 shadow-sm">
-            <div className="flex items-center justify-center h-16 px-6 bg-gradient-to-r from-blue-600 to-blue-700 border-b border-blue-800">
-              <span className="text-lg font-bold text-white tracking-wide">NAVIGATION</span>
+            {/* Sidebar header */}
+            <div className={`flex items-center h-16 px-3 bg-gradient-to-r from-blue-600 to-blue-700 border-b border-blue-800 ${sidebarCollapsed ? "justify-center" : "justify-between"}`}>
+              {!sidebarCollapsed && (
+                <span className="text-sm font-bold text-white tracking-wide">NAVIGATION</span>
+              )}
+              <div className={`flex items-center ${sidebarCollapsed ? "flex-col gap-1" : "gap-2"}`}>
+                {/* Fullscreen toggle */}
+                <button
+                  onClick={toggleFullscreen}
+                  title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+                  className="p-2 rounded-lg text-white bg-white/20 hover:bg-white/40 transition-colors"
+                >
+                  {isFullscreen
+                    ? <ArrowsPointingInIcon className="h-5 w-5" />
+                    : <ArrowsPointingOutIcon className="h-5 w-5" />}
+                </button>
+                {/* Collapse toggle */}
+                <button
+                  onClick={toggleSidebar}
+                  title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                  className="p-2 rounded-lg text-white bg-white/20 hover:bg-white/40 transition-colors"
+                >
+                  {sidebarCollapsed
+                    ? <ChevronRightIcon className="h-5 w-5" />
+                    : <ChevronLeftIcon className="h-5 w-5" />}
+                </button>
+              </div>
             </div>
             <div className="flex-1 flex flex-col overflow-y-auto">
               <nav className="flex-1 px-3 py-6 space-y-1">
@@ -594,7 +695,7 @@ export default function DashboardLayout({
                               setScorecarOpen(!scorecardOpen);
                             }
                           }}
-                          className={`w-full group flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                          className={`w-full group flex items-center ${sidebarCollapsed ? "justify-center" : "justify-between"} px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
                             (item.dropdownKey === "updateReport" && pathname.includes("-entry") && !isP7EntryPath && !pathname.includes("scorecard")) ||
                             (item.dropdownKey === "enrollment" && pathname.includes("enrollment") && !pathname.includes("theology")) ||
                             (item.dropdownKey === "theology" && pathname.includes("theology")) ||
@@ -604,9 +705,10 @@ export default function DashboardLayout({
                               ? "bg-blue-50 text-blue-700 shadow-sm"
                               : "text-gray-700 hover:bg-gray-50 hover:text-blue-600"
                           }`}
+                          title={sidebarCollapsed ? item.name : undefined}
                         >
                           <div className="flex items-center">
-                            <item.icon className={`mr-3 h-5 w-5 ${
+                            <item.icon className={`${sidebarCollapsed ? "" : "mr-3"} h-5 w-5 ${
                               (item.dropdownKey === "updateReport" && pathname.includes("-entry") && !isP7EntryPath && !pathname.includes("scorecard")) ||
                               (item.dropdownKey === "enrollment" && pathname.includes("enrollment") && !pathname.includes("theology")) ||
                               (item.dropdownKey === "theology" && pathname.includes("theology")) ||
@@ -616,9 +718,9 @@ export default function DashboardLayout({
                                 ? "text-blue-600" 
                                 : "text-gray-400"
                             }`} />
-                            {item.name}
+                            {!sidebarCollapsed && item.name}
                           </div>
-                          {((item.dropdownKey === "updateReport" && updateReportOpen) || 
+                          {!sidebarCollapsed && (((item.dropdownKey === "updateReport" && updateReportOpen) || 
                             (item.dropdownKey === "enrollment" && enrollmentOpen) ||
                             (item.dropdownKey === "theology" && theologyOpen) ||
                             (item.dropdownKey === "p7prep" && p7prepOpen) ||
@@ -627,10 +729,9 @@ export default function DashboardLayout({
                             <ChevronUpIcon className="h-4 w-4" />
                           ) : (
                             <ChevronDownIcon className="h-4 w-4" />
-                          )}
-                        </button>
+                          ))}                        </button>
                         
-                        {item.dropdownKey === "updateReport" && updateReportOpen && (
+                        {!sidebarCollapsed && item.dropdownKey === "updateReport" && updateReportOpen && (
                           <div className="ml-8 space-y-1 mt-1">
                             {updateReportSections.map((section) => (
                               <Link
@@ -645,7 +746,7 @@ export default function DashboardLayout({
                           </div>
                         )}
 
-                        {item.dropdownKey === "enrollment" && enrollmentOpen && (
+                        {!sidebarCollapsed && item.dropdownKey === "enrollment" && enrollmentOpen && (
                           <div className="ml-8 space-y-1 mt-1">
                             {enrollmentSections.map((section) => (
                               <Link
@@ -660,7 +761,7 @@ export default function DashboardLayout({
                           </div>
                         )}
 
-                        {item.dropdownKey === "theology" && theologyOpen && (
+                        {!sidebarCollapsed && item.dropdownKey === "theology" && theologyOpen && (
                           <div className="ml-8 space-y-1 mt-1">
                             {theologySections.map((section) => (
                               <Link
@@ -675,7 +776,7 @@ export default function DashboardLayout({
                           </div>
                         )}
 
-                        {item.dropdownKey === "p7prep" && p7prepOpen && (
+                        {!sidebarCollapsed && item.dropdownKey === "p7prep" && p7prepOpen && (
                           <div className="ml-8 space-y-1 mt-1">
                             {p7PrepSections.map((section) => (
                               <Link
@@ -690,7 +791,7 @@ export default function DashboardLayout({
                           </div>
                         )}
 
-                        {item.dropdownKey === "trusteeHub" && trusteeHubOpen && (
+                        {!sidebarCollapsed && item.dropdownKey === "trusteeHub" && trusteeHubOpen && (
                           <div className="ml-8 space-y-1 mt-1">
                             {trusteeHubSections.map((section) => (
                               <Link
@@ -705,7 +806,7 @@ export default function DashboardLayout({
                           </div>
                         )}
 
-                        {item.dropdownKey === "scorecard" && scorecardOpen && (
+                        {!sidebarCollapsed && item.dropdownKey === "scorecard" && scorecardOpen && (
                           <div className="ml-8 space-y-1 mt-1">
                             {scorecardSections.map((section) => (
                               <Link
@@ -724,34 +825,48 @@ export default function DashboardLayout({
                       <Link
                         key={item.name}
                         href={item.href}
-                        className={`group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                        title={sidebarCollapsed ? item.name : undefined}
+                        className={`group flex items-center ${sidebarCollapsed ? "justify-center" : ""} px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
                           pathname === item.href
                             ? "bg-blue-50 text-blue-700 shadow-sm"
                             : "text-gray-700 hover:bg-gray-50 hover:text-blue-600"
                         }`}
                       >
-                        <item.icon className={`mr-3 h-5 w-5 ${pathname === item.href ? "text-blue-600" : "text-gray-400"}`} />
-                        {item.name}
+                        <item.icon className={`${sidebarCollapsed ? "" : "mr-3"} h-5 w-5 ${pathname === item.href ? "text-blue-600" : "text-gray-400"}`} />
+                        {!sidebarCollapsed && item.name}
                       </Link>
                     )
                   ) : null
                 )}
               </nav>
-              <div className="p-4 border-t border-gray-200 mt-auto space-y-2">
-                <a
-                  href="/profile"
-                  className="w-full flex items-center justify-center px-3 py-2 text-sm font-medium text-gray-700 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
-                >
-                  <UserCircleIcon className="mr-2 h-5 w-5" />
-                  Edit Profile
-                </a>
-                <button
-                  onClick={handleSignOut}
-                  className="w-full flex items-center justify-center px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                >
-                  <ArrowRightOnRectangleIcon className="mr-2 h-5 w-5" />
-                  Sign Out
-                </button>
+              <div className="p-3 border-t border-gray-200 mt-auto space-y-2">
+                {sidebarCollapsed ? (
+                  <>
+                    <a href="/profile" title="Edit Profile" className="flex items-center justify-center p-2 rounded-lg text-gray-500 hover:bg-blue-50 hover:text-blue-600 transition-colors">
+                      <UserCircleIcon className="h-5 w-5" />
+                    </a>
+                    <button onClick={handleSignOut} title="Sign Out" className="w-full flex items-center justify-center p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors">
+                      <ArrowRightOnRectangleIcon className="h-5 w-5" />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <a
+                      href="/profile"
+                      className="w-full flex items-center justify-center px-3 py-2 text-sm font-medium text-gray-700 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+                    >
+                      <UserCircleIcon className="mr-2 h-5 w-5" />
+                      Edit Profile
+                    </a>
+                    <button
+                      onClick={handleSignOut}
+                      className="w-full flex items-center justify-center px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                    >
+                      <ArrowRightOnRectangleIcon className="mr-2 h-5 w-5" />
+                      Sign Out
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -760,7 +875,7 @@ export default function DashboardLayout({
 
       {/* Main content */}
       <div className="flex-1 overflow-auto">
-        <main className="p-4 sm:p-6 lg:p-8">{children}</main>
+        <main className="p-4 sm:p-6 lg:p-8 min-w-0">{children}</main>
       </div>
       </div>
       <MessagingDrawer
@@ -771,6 +886,7 @@ export default function DashboardLayout({
         onMessagesRead={refreshUnreadMessages}
       />
       <PushNotificationManager />
+      <PWAInstallPrompt />
     </div>
   );
 }

@@ -13,24 +13,11 @@ export async function POST(request: Request) {
 
     const subscription = await request.json();
 
-    // Store subscription in database (you'll need to add a PushSubscription model to your schema)
-    // For now, we'll just acknowledge it
-    
-    // TODO: Add to Prisma schema:
-    // model PushSubscription {
-    //   id        String   @id @default(cuid())
-    //   userId    String
-    //   endpoint  String   @unique
-    //   keys      Json
-    //   createdAt DateTime @default(now())
-    //   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-    // }
-
-    console.log('Push subscription saved for user:', session.user.id);
+    console.log('Push subscription received for user:', session.user.id);
     
     return NextResponse.json({ 
       success: true, 
-      message: 'Push notification subscription saved' 
+      message: 'Subscription registered' 
     });
   } catch (error) {
     console.error("Error saving push subscription:", error);

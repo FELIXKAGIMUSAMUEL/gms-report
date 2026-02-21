@@ -13,6 +13,7 @@ model User {
   password         String
   name             String
   role             UserRole       @default(GM)
+  avatarUrl        String?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
   receivedMessages Message[]      @relation("ReceivedMessages")
@@ -21,6 +22,7 @@ model User {
   reactions        Reaction[]
   todos            Todo[]
   pushSubscriptions PushSubscription[]
+  attachments      Attachment[]
 }
 
 model WeeklyReport {
@@ -116,6 +118,35 @@ model Enrollment {
   updatedAt DateTime @updatedAt
 
   @@unique([school, class, term, year])
+  @@index([school])
+  @@index([year, term])
+  @@index([school, year, term])
+}
+
+model EnrollmentType {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  records   DynamicEnrollment[]
+
+  @@index([name])
+}
+
+model DynamicEnrollment {
+  id               String         @id @default(cuid())
+  enrollmentTypeId String
+  enrollmentType   EnrollmentType @relation(fields: [enrollmentTypeId], references: [id], onDelete: Cascade)
+  school           String         @default("")
+  class            String         @default("")
+  year             Int
+  term             Int
+  count            Int            @default(0)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([enrollmentTypeId, school, class, year, term])
   @@index([school])
   @@index([year, term])
   @@index([school, year, term])
@@ -281,27 +312,29 @@ model P6PromotionResult {
 }
 
 model UpcomingEvent {
-  id        String     @id @default(cuid())
-  date      DateTime
-  activity  String
-  inCharge  String
-  rate      String?
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  status    ItemStatus @default(ACTIVE)
+  id          String       @id @default(cuid())
+  date        DateTime
+  activity    String
+  inCharge    String
+  rate        String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  status      ItemStatus   @default(ACTIVE)
+  attachments Attachment[]
 
   @@index([date])
   @@index([status])
 }
 
 model GMProject {
-  id             String     @id @default(cuid())
+  id             String       @id @default(cuid())
   projectName    String
-  progress       Float      @default(0)
+  progress       Float        @default(0)
   projectManager String
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
-  status         ItemStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  status         ItemStatus   @default(ACTIVE)
+  attachments    Attachment[]
 
   @@index([status])
 }
@@ -325,13 +358,14 @@ model WeeklyScorecard {
 }
 
 model RedIssue {
-  id         String      @id @default(cuid())
-  issue      String
-  inCharge   String
-  status     IssueStatus @default(OPEN)
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
-  itemStatus ItemStatus  @default(ACTIVE)
+  id          String       @id @default(cuid())
+  issue       String
+  inCharge    String
+  status      IssueStatus  @default(OPEN)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  itemStatus  ItemStatus   @default(ACTIVE)
+  attachments Attachment[]
 
   @@index([itemStatus])
   @@index([status])
@@ -646,6 +680,31 @@ model Goal {
   @@unique([title, year])
   @@index([year, category])
   @@index([status])
+}
+
+model Attachment {
+  id           String      @id @default(cuid())
+  filename     String      // original file name shown to user
+  storedName   String      // name saved on disk
+  url          String      // public URL path
+  mimeType     String
+  size         Int         // bytes
+  label        String?     // optional description / caption
+  uploadedById String
+  uploadedBy   User        @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+  projectId    String?
+  project      GMProject?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  issueId      String?
+  issue        RedIssue?   @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  eventId      String?
+  event        UpcomingEvent? @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([projectId])
+  @@index([issueId])
+  @@index([eventId])
+  @@index([uploadedById])
 }
 
 enum UserRole {

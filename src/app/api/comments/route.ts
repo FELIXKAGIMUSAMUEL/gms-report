@@ -285,10 +285,18 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { reportId, field, text } = body;
+    const normalizedText = typeof text === "string" ? text.trim() : "";
 
-    if (!reportId || !field || !text) {
+    if (!reportId || !field || !normalizedText) {
       return NextResponse.json(
         { error: "Missing required fields: reportId, field, text" },
+        { status: 400 }
+      );
+    }
+
+    if (normalizedText.length > 5000) {
+      return NextResponse.json(
+        { error: "Comment is too long. Maximum is 5000 characters." },
         { status: 400 }
       );
     }
@@ -297,7 +305,7 @@ export async function POST(request: NextRequest) {
       data: {
         reportId,
         field,
-        text,
+        text: normalizedText,
       },
       include: {
         report: {

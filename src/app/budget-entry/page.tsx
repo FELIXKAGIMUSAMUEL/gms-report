@@ -156,13 +156,18 @@ export default function BudgetEntryPage() {
       `}</style>
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="hidden print:block border-b-2 border-gray-800 pb-4 mb-6">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold text-gray-900">SIR APOLLO KAGGWA SCHOOLS - SINCE 1996</h1>
-            <p className="text-sm text-gray-600 mt-1">BUDGET REPORT</p>
-            <div className="mt-3 text-xs text-gray-600">
-              <p>Report Generated: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
-              <p>Period: Term {selectedTerm}, {selectedYear}</p>
+          <div className="flex items-center justify-center gap-4 mb-3">
+            <img src="/sak.jpg" alt="SAK" style={{width:"56px",height:"56px",objectFit:"contain"}} />
+            <div className="text-center">
+              <h1 className="text-2xl font-bold text-gray-900">SIR APOLLO KAGGWA SCHOOLS</h1>
+              <p className="text-xs text-gray-500 uppercase tracking-widest">Since 1996</p>
+              <p className="text-sm font-semibold text-gray-700 mt-1">BUDGET REPORT</p>
             </div>
+            <img src="/sak.jpg" alt="SAK" style={{width:"56px",height:"56px",objectFit:"contain"}} />
+          </div>
+          <div className="text-center text-xs text-gray-600">
+            <p>Report Generated: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+            <p>Period: Term {selectedTerm}, {selectedYear}</p>
           </div>
         </div>
         <div className="mb-8 flex items-start justify-between gap-4">

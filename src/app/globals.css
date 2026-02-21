@@ -423,3 +423,110 @@ body {
   animation: slide-down 0.3s ease-out;
 }
 
+/* Constrain Recharts ResponsiveContainer heights on small screens */
+@media (max-width: 640px) {
+  /* Cap all chart wrapper div heights so they don't dominate mobile viewport */
+  .recharts-responsive-container > div,
+  [class*="recharts-wrapper"] {
+    max-height: 260px !important;
+  }
+
+  /* Shrink chart text */
+  .recharts-text {
+    font-size: 10px !important;
+  }
+  .recharts-legend-wrapper {
+    font-size: 10px !important;
+  }
+  .recharts-tooltip-wrapper {
+    font-size: 11px !important;
+  }
+}
+
+/* Tablets */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .recharts-responsive-container > div,
+  [class*="recharts-wrapper"] {
+    max-height: 320px !important;
+  }
+}
+
+/* ===== Responsive Charts & Tables ===== */
+
+/* All chart wrappers: allow natural shrinking on small screens */
+.recharts-wrapper,
+.recharts-surface {
+  max-width: 100% !important;
+  touch-action: pan-y pinch-zoom;
+}
+
+/* Make all chart containers scrollable on tiny screens */
+@media (max-width: 480px) {
+  .recharts-responsive-container {
+    min-height: 200px;
+  }
+
+  /* Shrink chart heights on small phones */
+  .recharts-wrapper {
+    height: 240px !important;
+  }
+
+  /* Make chart text readable on small screens */
+  .recharts-text,
+  .recharts-legend-item-text {
+    font-size: 10px !important;
+  }
+
+  .recharts-cartesian-axis-tick-value {
+    font-size: 9px !important;
+  }
+}
+
+/* Tables: horizontal scroll on any screen that gets tight */
+.table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* All overflow-x-auto tables get this automatically */
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Grid responsive: force single column on very small screens */
+@media (max-width: 360px) {
+  .grid-cols-2,
+  .md\:grid-cols-2,
+  .sm\:grid-cols-2 {
+    grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+  }
+  .grid-cols-3,
+  .md\:grid-cols-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+/* Safe area on iPhone notch / home bar */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  body {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Prevent text from overflowing on small screens */
+@media (max-width: 640px) {
+  h1, h2, h3 {
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+
+  /* Shrink filter bars on mobile */
+  select, input[type="text"], input[type="number"] {
+    font-size: 14px; /* prevents iOS zoom-in on focus */
+  }
+
+  /* Chart container: allow vertical scroll inside sections */
+  .bg-white.p-6.rounded-lg {
+    padding: 1rem !important;
+  }
+}

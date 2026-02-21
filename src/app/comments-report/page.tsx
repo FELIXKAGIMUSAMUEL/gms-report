@@ -217,16 +217,21 @@ export default function CommentsReportPage() {
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 print:shadow-none print:border-none">
             {/* Print Header */}
             <div className="hidden print:block border-b-2 border-gray-800 pb-4 mb-6">
-              <div className="text-center">
-                <h1 className="text-2xl font-bold text-gray-900">SIR APOLLO KAGGWA SCHOOLS - SINCE 1996</h1>
-                <p className="text-sm text-gray-600 mt-1">COMMENTS & FEEDBACK REPORT</p>
-                <div className="mt-3 text-xs text-gray-600">
-                  <p>Report Generated: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
-                  <p>Period: {new Date(startDate).toLocaleDateString('en-GB')} to {new Date(endDate).toLocaleDateString('en-GB')}</p>
-                  {selectedUserType !== "all" && (
-                    <p>Filter: {selectedUserType === "trustees" ? "Trustees Only" : "General Managers Only"}</p>
-                  )}
+              <div className="flex items-center justify-center gap-4 mb-3">
+                <img src="/sak.jpg" alt="SAK" style={{width:"56px",height:"56px",objectFit:"contain"}} />
+                <div className="text-center">
+                  <h1 className="text-2xl font-bold text-gray-900">SIR APOLLO KAGGWA SCHOOLS</h1>
+                  <p className="text-xs text-gray-500 uppercase tracking-widest">Since 1996</p>
+                  <p className="text-sm font-semibold text-gray-700 mt-1">COMMENTS &amp; FEEDBACK REPORT</p>
                 </div>
+                <img src="/sak.jpg" alt="SAK" style={{width:"56px",height:"56px",objectFit:"contain"}} />
+              </div>
+              <div className="text-center text-xs text-gray-600">
+                <p>Report Generated: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+                <p>Period: {new Date(startDate).toLocaleDateString('en-GB')} to {new Date(endDate).toLocaleDateString('en-GB')}</p>
+                {selectedUserType !== "all" && (
+                  <p>Filter: {selectedUserType === "trustees" ? "Trustees Only" : "General Managers Only"}</p>
+                )}
               </div>
             </div>
 

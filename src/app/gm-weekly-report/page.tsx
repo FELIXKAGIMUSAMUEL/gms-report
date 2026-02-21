@@ -106,9 +106,15 @@ export default function GMWeeklyReportPage() {
 
       {/* Print Header */}
       <div className="print-header w-full bg-blue-900 text-white p-8 text-center mb-8">
-        <h1 className="text-4xl font-bold">SIR APOLLO KAGGWA SCHOOLS</h1>
-        <p className="text-lg mt-2">SINCE 1996</p>
-        <h2 className="text-2xl font-bold mt-6">WEEKLY PERFORMANCE REPORT</h2>
+        <div className="flex items-center justify-center gap-6 mb-4">
+          <img src="/sak.jpg" alt="SAK" style={{width:"72px",height:"72px",objectFit:"contain",background:"white",borderRadius:"8px",padding:"4px"}} />
+          <div>
+            <h1 className="text-4xl font-bold">SIR APOLLO KAGGWA SCHOOLS</h1>
+            <p className="text-lg mt-1">SINCE 1996</p>
+          </div>
+          <img src="/sak.jpg" alt="SAK" style={{width:"72px",height:"72px",objectFit:"contain",background:"white",borderRadius:"8px",padding:"4px"}} />
+        </div>
+        <h2 className="text-2xl font-bold mt-2">WEEKLY PERFORMANCE REPORT</h2>
         <p className="mt-3 text-lg">Term {selectedTerm}, {selectedYear}</p>
         <p className="text-sm mt-2">Weeks {weekStart} - {weekEnd}</p>
       </div>
@@ -509,7 +515,7 @@ export default function GMWeeklyReportPage() {
               </div>
               <div>
                 <p className="text-sm text-gray-600 mb-8">___________________________________</p>
-                <p className="text-sm font-semibold text-gray-900">Director's Signature</p>
+                <p className="text-sm font-semibold text-gray-900">Director&apos;s Signature</p>
                 <p className="text-sm text-gray-600">Date: ____________________</p>
               </div>
             </div>

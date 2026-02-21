@@ -29,8 +29,26 @@ yarn-error.log*
 .env*.local
 .env
 
-# Database backups - keep the latest one for setup
+# Database backups
 # database_backup_*.sql
+/backups/
+
+# User uploads (generated at runtime, not in source)
+# Ignore all uploaded files but keep directory structure with .gitkeep
+/public/uploads/**/*
+!/public/uploads/.gitkeep
+!/public/uploads/attachments/
+!/public/uploads/attachments/.gitkeep
+!/public/uploads/avatars/
+!/public/uploads/avatars/.gitkeep
+
+# GitHub integration config (contains token)
+github-config.json
+
+# Misc leftover files
+git_push.log
+push_result.txt
+DEPLOYMENT_SUMMARY.md
 
 # vercel
 .vercel

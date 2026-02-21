@@ -16,7 +16,8 @@ export default withAuth(
     
     // Check if token exists and is not expired
     const now = Math.floor(Date.now() / 1000);
-    const tokenExpired = token?.exp && now > token.exp;
+    const exp = typeof token?.exp === "number" ? token.exp : Number(token?.exp);
+    const tokenExpired = Number.isFinite(exp) ? now > exp : false;
     const isAuth = !!token && !tokenExpired;
 
     // If token is expired, redirect to login
@@ -64,7 +65,8 @@ export default withAuth(
         // Check if token is valid and not expired
         if (!token) return false;
         const now = Math.floor(Date.now() / 1000);
-        return !token.exp || now < token.exp;
+        const exp = typeof token?.exp === "number" ? token.exp : Number(token?.exp);
+        return !Number.isFinite(exp) || now < exp;
       },
     },
     pages: {

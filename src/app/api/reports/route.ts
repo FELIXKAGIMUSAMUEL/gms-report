@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { PrismaClient } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { sendPushToUser } from "@/lib/push-notifications";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
 
 // GET /api/reports - Get all weekly reports with optional filtering
 export async function GET(request: NextRequest) {

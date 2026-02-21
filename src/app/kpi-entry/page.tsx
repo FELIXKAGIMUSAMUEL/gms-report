@@ -29,6 +29,15 @@ interface EnrollmentRecord {
   count: number;
 }
 
+interface P7PrepResult {
+  id: string;
+  year: number;
+  term: number;
+  prepNumber: number;
+  divisionI?: number;
+  enrollment?: number;
+}
+
 interface School {
   id: string;
   name: string;

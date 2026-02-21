@@ -477,6 +477,19 @@ export default function ScorecardAnalysisPage() {
         }
       `}</style>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+        {/* Print Header */}
+        <div className="hidden print:block border-b-2 border-gray-800 pb-4 mb-6">
+          <div className="flex items-center justify-center gap-4 mb-2">
+            <img src="/sak.jpg" alt="SAK" style={{width:"56px",height:"56px",objectFit:"contain"}} />
+            <div className="text-center">
+              <h1 className="text-2xl font-bold text-gray-900">SIR APOLLO KAGGWA SCHOOLS</h1>
+              <p className="text-xs text-gray-500 uppercase tracking-widest">Since 1996</p>
+              <p className="text-sm font-semibold text-gray-700 mt-1">SCORECARD ANALYSIS REPORT</p>
+            </div>
+            <img src="/sak.jpg" alt="SAK" style={{width:"56px",height:"56px",objectFit:"contain"}} />
+          </div>
+          <p className="text-center text-xs text-gray-600">Term {selectedTerm}, {selectedYear} &middot; Generated: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+        </div>
         {/* Header */}
         <div className="mb-6 sm:mb-8">
           <div className="flex items-center gap-2 mb-4 sm:mb-6">

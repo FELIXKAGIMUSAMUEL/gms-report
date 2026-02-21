@@ -1,15 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import DashboardLayout from "@/components/DashboardLayout";
-import { UserIcon, EnvelopeIcon, LockClosedIcon, CheckCircleIcon, ExclamationCircleIcon } from "@heroicons/react/24/outline";
+import { UserIcon, EnvelopeIcon, LockClosedIcon, CheckCircleIcon, ExclamationCircleIcon, CameraIcon, TrashIcon } from "@heroicons/react/24/outline";
 
 export default function ProfilePage() {
   const { data: session, update } = useSession();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -33,11 +37,64 @@ export default function ProfilePage() {
           name: data.name || "",
           email: data.email || "",
         }));
+        setAvatarUrl(data.avatarUrl || null);
       }
     } catch (error) {
       console.error("Error fetching profile:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Preview immediately
+    const reader = new FileReader();
+    reader.onload = (ev) => setAvatarPreview(ev.target?.result as string);
+    reader.readAsDataURL(file);
+
+    setUploadingAvatar(true);
+    setMessage(null);
+    try {
+      const fd = new FormData();
+      fd.append("avatar", file);
+      const res = await fetch("/api/profile/avatar", { method: "POST", body: fd });
+      const data = await res.json();
+      if (res.ok) {
+        setAvatarUrl(data.avatarUrl);
+        setAvatarPreview(null);
+        await update(); // refresh session so navbar updates
+        setMessage({ type: "success", text: "Profile picture updated!" });
+      } else {
+        setAvatarPreview(null);
+        setMessage({ type: "error", text: data.error || "Upload failed" });
+      }
+    } catch {
+      setAvatarPreview(null);
+      setMessage({ type: "error", text: "Upload failed. Please try again." });
+    } finally {
+      setUploadingAvatar(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    setUploadingAvatar(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/profile/avatar", { method: "DELETE" });
+      if (res.ok) {
+        setAvatarUrl(null);
+        setAvatarPreview(null);
+        await update();
+        setMessage({ type: "success", text: "Profile picture removed." });
+      }
+    } catch {
+      setMessage({ type: "error", text: "Failed to remove picture." });
+    } finally {
+      setUploadingAvatar(false);
     }
   };
 
@@ -145,6 +202,63 @@ export default function ProfilePage() {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
+
+          {/* Avatar card */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Profile Picture</h2>
+            <div className="flex items-center gap-6">
+              {/* Avatar preview */}
+              <div className="relative flex-shrink-0">
+                <div className="w-24 h-24 rounded-full overflow-hidden ring-4 ring-gray-100 shadow-md">
+                  <img
+                    src={avatarPreview ?? (avatarUrl ? avatarUrl + "?t=" + Date.now() : "/User_Avatar.png")}
+                    alt="Profile"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                {uploadingAvatar && (
+                  <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center">
+                    <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  </div>
+                )}
+              </div>
+
+              {/* Upload controls */}
+              <div className="flex flex-col gap-2">
+                <p className="text-sm text-gray-500">JPG, PNG or WebP · max 3 MB</p>
+                <div className="flex gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadingAvatar}
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                  >
+                    <CameraIcon className="w-4 h-4" />
+                    {avatarUrl ? "Change picture" : "Upload picture"}
+                  </button>
+                  {avatarUrl && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveAvatar}
+                      disabled={uploadingAvatar}
+                      className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 disabled:opacity-50 transition-colors"
+                    >
+                      <TrashIcon className="w-4 h-4" />
+                      Remove
+                    </button>
+                  )}
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="hidden"
+                  onChange={handleAvatarChange}
+                />
+              </div>
+            </div>
+          </div>
+
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <h2 className="text-xl font-semibold text-gray-900 mb-6">Personal Information</h2>
 

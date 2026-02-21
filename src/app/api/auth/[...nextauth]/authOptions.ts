@@ -1,10 +1,8 @@
 import { AuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { PrismaClient } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
 import { checkRateLimit, resetRateLimit } from "@/lib/security";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
 
 export const authOptions: AuthOptions = {
   providers: [
@@ -53,6 +51,7 @@ export const authOptions: AuthOptions = {
           email: user.email,
           name: user.name,
           role: user.role,
+          avatarUrl: user.avatarUrl ?? null,
         };
       },
     }),
@@ -65,20 +64,21 @@ export const authOptions: AuthOptions = {
         token.email = user.email;
         token.name = user.name;
         token.role = user.role;
-        token.iat = Math.floor(Date.now() / 1000); // Issue time
+        token.avatarUrl = (user as any).avatarUrl ?? null;
+        token.iat = Math.floor(Date.now() / 1000);
       }
       
-      // On update(), fetch fresh user data from database
       if (trigger === "update" && token.id) {
         const freshUser = await prisma.user.findUnique({
           where: { id: token.id as string },
-          select: { id: true, name: true, email: true, role: true },
+          select: { id: true, name: true, email: true, role: true, avatarUrl: true },
         });
         
         if (freshUser) {
           token.name = freshUser.name;
           token.email = freshUser.email;
           token.role = freshUser.role;
+          token.avatarUrl = freshUser.avatarUrl ?? null;
         }
       }
       
@@ -90,6 +90,7 @@ export const authOptions: AuthOptions = {
         session.user.email = token.email as string;
         session.user.name = token.name as string;
         session.user.role = token.role as string;
+        session.user.avatarUrl = (token.avatarUrl as string | null) ?? null;
       }
       return session;
     },
@@ -100,11 +101,11 @@ export const authOptions: AuthOptions = {
   },
   session: {
     strategy: "jwt",
-    maxAge: 2 * 60 * 60, // 2 hours - session expires after 2 hours
-    updateAge: 10 * 60, // 10 minutes - update session every 10 minutes of activity
+    maxAge: 8 * 60 * 60, // 8 hours - full workday
+    updateAge: 30 * 60, // 30 minutes - update session on activity
   },
   jwt: {
-    maxAge: 2 * 60 * 60, // 2 hours
+    maxAge: 8 * 60 * 60, // 8 hours
   },
   secret: process.env.NEXTAUTH_SECRET,
 };

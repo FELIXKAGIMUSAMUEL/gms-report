@@ -8,6 +8,7 @@ import { ArrowLeftIcon, CheckCircleIcon } from "@heroicons/react/24/outline";
 
 interface FormData {
   source: string;
+  amount: number;
   percentage: number;
   year: number;
   month: number;
@@ -21,6 +22,7 @@ export default function EnterIncome() {
   const router = useRouter();
   const [formData, setFormData] = useState<FormData>({
     source: "",
+    amount: 0,
     percentage: 0,
     year: currentYear,
     month: currentMonth,
@@ -40,7 +42,7 @@ export default function EnterIncome() {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: ["percentage", "year", "month"].includes(name) ? Number(value) : value,
+      [name]: ["amount", "percentage", "year", "month"].includes(name) ? Number(value) : value,
     }));
   };
 

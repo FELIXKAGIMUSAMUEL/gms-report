@@ -4,8 +4,10 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
+import Link from "next/link";
 import KPITargetSettings from "@/components/KPITargetSettings";
 import TodoListCard from "@/components/TodoListCard";
+import AttachmentPanel from "@/components/AttachmentPanel";
 import PushNotificationSetup from "@/components/PushNotificationSetup";
 import * as XLSX from "xlsx";
 import {
@@ -13,6 +15,7 @@ import {
 	Line,
 	BarChart,
 	Bar,
+	Cell,
 	XAxis,
 	YAxis,
 	CartesianGrid,
@@ -94,8 +97,8 @@ interface RedIssue {
 	term?: number;
 	issue?: string;
 	inCharge?: string;
- 	createdAt?: string;
- 	resolvedAt?: string;
+	createdAt?: string;
+	resolvedAt?: string;
 }
 
 interface UpcomingEvent {
@@ -122,14 +125,37 @@ interface OtherIncome {
 	id: string;
 	source: string;
 	amount: number;
+	percentage?: number;
 	year: number;
 	month: number;
+	term?: number;
 }
 
 interface IncomeSource {
 	id: string;
 	name: string;
 	isActive: boolean;
+	createdAt: string;
+	updatedAt: string;
+}
+
+interface EnrollmentType {
+	id: string;
+	name: string;
+	isActive: boolean;
+	createdAt: string;
+	updatedAt: string;
+}
+
+interface DynamicEnrollment {
+	id: string;
+	enrollmentTypeId: string;
+	school: string;
+	class: string;
+	year: number;
+	term: number;
+	count: number;
+	enrollmentType?: EnrollmentType;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -223,6 +249,9 @@ export default function Dashboard() {
 	const [savingProjectIds, setSavingProjectIds] = useState<Set<string>>(new Set());
 	const [incomes, setIncomes] = useState<OtherIncome[]>([]);
 	const [incomeSources, setIncomeSources] = useState<IncomeSource[]>([]);
+	const [enrollmentTypes, setEnrollmentTypes] = useState<EnrollmentType[]>([]);
+	const [dynamicEnrollments, setDynamicEnrollments] = useState<DynamicEnrollment[]>([]);
+	const [allDynamicEnrollments, setAllDynamicEnrollments] = useState<DynamicEnrollment[]>([]);
 	const [theologyEnrollments, setTheologyEnrollments] = useState<any[]>([]);
 	const [previousTheologyEnrollments, setPreviousTheologyEnrollments] = useState<any[]>([]);
 	const [enrollments, setEnrollments] = useState<any[]>([]);
@@ -234,10 +263,16 @@ export default function Dashboard() {
 	const [postingReaction, setPostingReaction] = useState<Record<string, boolean>>({});
 	const [termSettings, setTermSettings] = useState<TermSetting[]>([]);
 	const [p7YearsWindow, setP7YearsWindow] = useState<number>(999); // Default to all years
-	const [p7ChartType, setP7ChartType] = useState<"line" | "bar">("line"); // Chart type toggle
+	const [p7ChartType, setP7ChartType] = useState<"line" | "bar">("bar"); // Chart type toggle
+	const [p7PrepFilter, setP7PrepFilter] = useState<string>("ALL"); // Prep filter
+	const [showTermAverages, setShowTermAverages] = useState<boolean>(false); // Term averages panel
 	const [enrollmentSchoolFilter, setEnrollmentSchoolFilter] = useState<string>("ALL"); // School filter for enrollment chart
 	const [enrollmentClassFilter, setEnrollmentClassFilter] = useState<string>("ALL"); // Class filter for enrollment chart
 	const [enrollmentTermFilter, setEnrollmentTermFilter] = useState<number | "ALL">("ALL"); // Term filter for enrollment chart
+	const [enrollmentTypeFilter, setEnrollmentTypeFilter] = useState<string>("ALL");
+	const [enrollmentYearFilter, setEnrollmentYearFilter] = useState<number | "ALL">("ALL");
+	const [enrollmentView, setEnrollmentView] = useState<"by-year" | "total">("by-year");
+	const [enrollmentSeriesFilter, setEnrollmentSeriesFilter] = useState<"both" | "enrollment" | "theology">("both");
 	const [incomeYearFilter, setIncomeYearFilter] = useState<number | "ALL">("ALL"); // Year filter for income
 	const [incomeTermFilter, setIncomeTermFilter] = useState<number | "ALL">("ALL"); // Term filter for income
 	const [incomeSourceFilter, setIncomeSourceFilter] = useState<string>("ALL"); // Source filter for income
@@ -253,6 +288,10 @@ export default function Dashboard() {
 	const [eventStatusFilter, setEventStatusFilter] = useState<"ACTIVE" | "COMPLETED" | "ALL">("ALL");
 	const [eventPriorityFilter, setEventPriorityFilter] = useState<string>("ALL");
 	const [completedEventIds, setCompletedEventIds] = useState<Set<string>>(new Set());
+	const [calendarMonth, setCalendarMonth] = useState(() => {
+		const now = new Date();
+		return new Date(now.getFullYear(), now.getMonth(), 1);
+	});
 	const [incomeSourceDeleting, setIncomeSourceDeleting] = useState<string | null>(null);
 	const [todos, setTodos] = useState<Todo[]>([]);
 	const [newTodo, setNewTodo] = useState({ title: "", description: "", dueDate: "", priority: "MEDIUM", category: "GENERAL" });
@@ -263,12 +302,28 @@ export default function Dashboard() {
 	const [issueSort, setIssueSort] = useState<"NEWEST" | "OLDEST" | "LONGEST_OPEN">("NEWEST");
 	const [updatingIssueId, setUpdatingIssueId] = useState<string | null>(null);
 
+	// Card-level year filter & expand/collapse state (Events, Projects, Issues)
+	const [eventsCardYear, setEventsCardYear] = useState<number | "ALL">("ALL");
+	const [showCompletedEvents, setShowCompletedEvents] = useState(false);
+	const [showMoreActiveEvents, setShowMoreActiveEvents] = useState(false);
+	const [showCompletedProjects, setShowCompletedProjects] = useState(false);
+	const [showMoreActiveProjects, setShowMoreActiveProjects] = useState(false);
+	const [issuesCardYear, setIssuesCardYear] = useState<number | "ALL">("ALL");
+	const [showResolvedIssues, setShowResolvedIssues] = useState(false);
+	const [showMoreActiveIssues, setShowMoreActiveIssues] = useState(false);
+
 	const [showEnrollmentForm, setShowEnrollmentForm] = useState(false);
+	const [showEnrollmentTypeManager, setShowEnrollmentTypeManager] = useState(false);
 	const [enrollmentForm, setEnrollmentForm] = useState({
 		year: 2020,
 		totalEnrollment: 0,
 		theologyEnrollment: 0,
 	});
+	const [newEnrollmentTypeName, setNewEnrollmentTypeName] = useState("");
+	const [dynamicEnrollmentTypeId, setDynamicEnrollmentTypeId] = useState("");
+	const [dynamicEnrollmentCount, setDynamicEnrollmentCount] = useState(0);
+	const [savingEnrollmentType, setSavingEnrollmentType] = useState(false);
+	const [savingDynamicEnrollment, setSavingDynamicEnrollment] = useState(false);
 	const [savingEnrollment, setSavingEnrollment] = useState(false);
 
 	const [kpiTargets, setKpiTargets] = useState({
@@ -298,6 +353,12 @@ export default function Dashboard() {
 			router.push("/login");
 		}
 	}, [status, router]);
+
+	useEffect(() => {
+		if (!dynamicEnrollmentTypeId && enrollmentTypes.length > 0) {
+			setDynamicEnrollmentTypeId(enrollmentTypes[0].id);
+		}
+	}, [enrollmentTypes, dynamicEnrollmentTypeId]);
 
 	useEffect(() => {
 		const fetchData = async () => {
@@ -334,7 +395,7 @@ export default function Dashboard() {
 				term: String(prevTerm),
 			});
 
-			const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sourcesRes, incomesRes, theologyRes, previousTheologyRes, enrollmentRes, previousEnrollmentRes, reactionsRes, todosRes, p7PrepRes, p7PleRes, p6PromotionRes, termSettingsRes] = await Promise.all([
+			const [reportsRes, scorecardsRes, p7Res, issuesRes, eventsRes, projectsRes, sourcesRes, incomesRes, enrollmentTypesRes, dynamicEnrollmentsRes, theologyRes, previousTheologyRes, enrollmentRes, previousEnrollmentRes, reactionsRes, todosRes, p7PrepRes, p7PleRes, p6PromotionRes, termSettingsRes] = await Promise.all([
 			fetch("/api/reports"),
 			fetch(`/api/scorecard?${scorecardsParams.toString()}`),
 			fetch("/api/p7-prep"),
@@ -343,6 +404,8 @@ export default function Dashboard() {
 			fetch("/api/projects"),
 			fetch("/api/income-sources"),
 			fetch("/api/other-income"),
+			fetch("/api/enrollment-types"),
+			fetch(`/api/dynamic-enrollments?year=${selectedYear}&term=${selectedTerm}`),
 			fetch(`/api/theology-enrollment?${theologyParams.toString()}`),
 			fetch(`/api/theology-enrollment?${previousTheologyParams.toString()}`),
 			fetch(`/api/enrollment?${enrollmentParams.toString()}`),
@@ -355,7 +418,13 @@ export default function Dashboard() {
 				fetch("/api/settings/term"),
 			]);
 
-			if (!reportsRes.ok) throw new Error("Failed to fetch reports");
+			if (!reportsRes.ok) {
+				if (reportsRes.status === 401) {
+					window.location.href = "/login";
+					return;
+				}
+				throw new Error("Failed to fetch reports");
+			}
 			if (!scorecardsRes.ok) throw new Error("Failed to fetch scorecards");
 			if (!p7Res.ok) throw new Error("Failed to fetch P7 data");
 
@@ -370,6 +439,8 @@ export default function Dashboard() {
 			const projectsData = projectsRes.ok ? await projectsRes.json() : { data: [] };
 			const sourcesData = sourcesRes.ok ? await sourcesRes.json() : { data: [] };
 			const incomesResponse = incomesRes.ok ? await incomesRes.json() : { data: [] };
+			const enrollmentTypesData = enrollmentTypesRes.ok ? await enrollmentTypesRes.json() : { data: [] };
+			const dynamicEnrollmentsData = dynamicEnrollmentsRes.ok ? await dynamicEnrollmentsRes.json() : { data: [] };
 			const theologyData = theologyRes.ok ? await theologyRes.json() : [];
 			const previousTheologyData = previousTheologyRes.ok ? await previousTheologyRes.json() : [];
 			const enrollmentData = enrollmentRes.ok ? await enrollmentRes.json() : [];
@@ -419,6 +490,8 @@ export default function Dashboard() {
 				setProjects(Array.isArray(projectsData) ? projectsData : (projectsData.data || []));
 				setIncomeSources(sourcesData.data || []);
 				setIncomes(incomesResponse.data || []);
+				setEnrollmentTypes(Array.isArray(enrollmentTypesData) ? enrollmentTypesData : enrollmentTypesData.data || []);
+				setDynamicEnrollments(Array.isArray(dynamicEnrollmentsData) ? dynamicEnrollmentsData : dynamicEnrollmentsData.data || []);
 				setTheologyEnrollments(Array.isArray(theologyData) ? theologyData : []);
 				setPreviousTheologyEnrollments(Array.isArray(previousTheologyData) ? previousTheologyData : []);
 				setEnrollments(Array.isArray(enrollmentData) ? enrollmentData : []);
@@ -488,23 +561,26 @@ export default function Dashboard() {
 	useEffect(() => {
 		const fetchTrendData = async () => {
 			try {
-				const [allEnrollmentRes, allTheologyRes] = await Promise.all([
+				const [allEnrollmentRes, allTheologyRes, allDynamicEnrollmentsRes] = await Promise.all([
 					fetch("/api/enrollment"),
 					fetch("/api/theology-enrollment"),
+					fetch("/api/dynamic-enrollments"),
 				]);
 
 				const allEnrollmentData = allEnrollmentRes.ok ? await allEnrollmentRes.json() : [];
 				const allTheologyData = allTheologyRes.ok ? await allTheologyRes.json() : [];
+				const allDynamicData = allDynamicEnrollmentsRes.ok ? await allDynamicEnrollmentsRes.json() : { data: [] };
 
 				setAllEnrollments(Array.isArray(allEnrollmentData) ? allEnrollmentData : []);
 				setAllTheologyEnrollments(Array.isArray(allTheologyData) ? allTheologyData : []);
+				setAllDynamicEnrollments(Array.isArray(allDynamicData) ? allDynamicData : allDynamicData.data || []);
 			} catch (err) {
 				console.error("Failed to fetch trend data:", err);
 			}
 		};
 
 		fetchTrendData();
-	}, []); // Only fetch once on mount
+	}, [refreshTick]);
 
 	const getCurrentTermSelection = useCallback(() => {
 		if (!termSettings.length) return null;
@@ -784,7 +860,7 @@ export default function Dashboard() {
 		];
 	}, [currentReport, previousWeekReport, kpiTargets, currentTheologyEnrollment, previousTheologyEnrollment, currentEnrollment, previousEnrollment]);
 
-		const metricSourceLabels = useMemo(() => ({
+		const metricSourceLabels = useMemo<Record<string, string>>(() => ({
 			"p7-prep": prepProgress.label ? `From ${prepProgress.label} Div I%` : "No prep data yet",
 			enrollment: `From enrollment entry · Y${selectedYear} T${selectedTerm}`,
 			"theology-enrollment": `From theology entry · Y${selectedYear} T${selectedTerm}`,
@@ -1013,14 +1089,143 @@ export default function Dashboard() {
 		});
 	}, [events, selectedYear, selectedWeek, viewMode, eventStatusFilter, eventPriorityFilter, completedEventIds]);
 
+	// ── Card-level: Upcoming Events ─────────────────────────────────────────────
+	const availableEventYears = useMemo(() => {
+		const years = new Set<number>();
+		events.forEach(evt => { if (evt.year) years.add(evt.year); });
+		return Array.from(years).sort((a, b) => b - a);
+	}, [events]);
+
+	const cardEventsList = useMemo(() => {
+		const seen = new Set<string>();
+		const deduped = events.filter(evt => {
+			const key = `${evt.id || ""}-${evt.activity || ""}-${evt.date || ""}-${evt.inCharge || ""}`;
+			if (seen.has(key)) return false;
+			seen.add(key);
+			return true;
+		});
+		let filtered = [...deduped];
+		if (eventsCardYear !== "ALL") {
+			filtered = filtered.filter(evt => (evt.year ?? selectedYear) === eventsCardYear);
+		}
+		if (eventStatusFilter !== "ALL") {
+			filtered = filtered.filter(evt => {
+				const isCompleted = completedEventIds.has(evt.id);
+				const status = isCompleted ? "COMPLETED" : (evt.status ?? "ACTIVE");
+				return status === eventStatusFilter;
+			});
+		}
+		if (eventPriorityFilter !== "ALL") {
+			filtered = filtered.filter(evt => (evt.rate || evt.priority || "Low") === eventPriorityFilter);
+		}
+		return filtered.sort((a, b) => {
+			const aCompleted = completedEventIds.has(a.id) || a.status === "COMPLETED";
+			const bCompleted = completedEventIds.has(b.id) || b.status === "COMPLETED";
+			if (aCompleted !== bCompleted) return aCompleted ? 1 : -1;
+			return new Date(a.date).getTime() - new Date(b.date).getTime();
+		});
+	}, [events, eventsCardYear, selectedYear, eventStatusFilter, eventPriorityFilter, completedEventIds]);
+
+	const activeCardEvents = useMemo(() =>
+		cardEventsList.filter(evt => !completedEventIds.has(evt.id) && evt.status !== "COMPLETED"),
+		[cardEventsList, completedEventIds]);
+
+	const completedCardEvents = useMemo(() =>
+		cardEventsList.filter(evt => completedEventIds.has(evt.id) || evt.status === "COMPLETED"),
+		[cardEventsList, completedEventIds]);
+
+	// ── Card-level: GM Projects ──────────────────────────────────────────────────
+	const activeProjects = useMemo(() =>
+		projects
+			.filter(p => (p.status || "ACTIVE") !== "COMPLETED")
+			.sort((a, b) => (b.progress ?? 0) - (a.progress ?? 0) || a.projectName.localeCompare(b.projectName)),
+		[projects]);
+
+	const completedProjects = useMemo(() =>
+		projects
+			.filter(p => (p.status || "ACTIVE") === "COMPLETED")
+			.sort((a, b) => a.projectName.localeCompare(b.projectName)),
+		[projects]);
+
+	// ── Card-level: Red Issues ───────────────────────────────────────────────────
+	const availableIssueYears = useMemo(() => {
+		const years = new Set<number>();
+		issues.forEach(issue => { if (issue.year) years.add(issue.year); });
+		return Array.from(years).sort((a, b) => b - a);
+	}, [issues]);
+
+	const cardIssuesList = useMemo(() => {
+		const seen = new Set<string>();
+		let list = issues.filter(issue => {
+			const key = issue.id || `${issue.issue || issue.title || "unknown"}-${issue.createdAt || ""}-${issue.inCharge || ""}`;
+			if (seen.has(key)) return false;
+			seen.add(key);
+			return true;
+		});
+		if (issuesCardYear !== "ALL") {
+			list = list.filter(issue => (issue.year ?? selectedYear) === issuesCardYear);
+		} else {
+			if (viewMode === "consolidated") {
+				list = list.filter(issue => (issue.year ?? selectedYear) === selectedYear);
+			} else {
+				list = list.filter(issue =>
+					(issue.year ?? selectedYear) === selectedYear &&
+					(issue.week ?? selectedWeek) === selectedWeek &&
+					(issue.term ?? selectedTerm) === selectedTerm
+				);
+			}
+		}
+		return list;
+	}, [issues, issuesCardYear, selectedYear, selectedWeek, selectedTerm, viewMode]);
+
+	const activeCardIssues = useMemo(() => {
+		let list = cardIssuesList.filter(issue => (issue.status || "OPEN") !== "RESOLVED");
+		if (issueAssigneeFilter !== "ALL") {
+			list = list.filter(issue => issue.inCharge === issueAssigneeFilter);
+		}
+		const statusOrder: Record<string, number> = { OPEN: 0, IN_PROGRESS: 1 };
+		return [...list].sort((a, b) => {
+			const statusDiff = (statusOrder[a.status || "OPEN"] ?? 0) - (statusOrder[b.status || "OPEN"] ?? 0);
+			if (statusDiff !== 0) return statusDiff;
+			const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+			const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+			switch (issueSort) {
+				case "OLDEST": return dateA - dateB;
+				case "LONGEST_OPEN": return (daysBetween(b.createdAt, b.resolvedAt) ?? 0) - (daysBetween(a.createdAt, a.resolvedAt) ?? 0);
+				default: return dateB - dateA;
+			}
+		});
+	}, [cardIssuesList, issueAssigneeFilter, issueSort]);
+
+	const resolvedCardIssues = useMemo(() => {
+		let list = cardIssuesList.filter(issue => issue.status === "RESOLVED");
+		if (issueAssigneeFilter !== "ALL") {
+			list = list.filter(issue => issue.inCharge === issueAssigneeFilter);
+		}
+		return [...list].sort((a, b) => {
+			const dateA = a.resolvedAt ? new Date(a.resolvedAt).getTime() : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+			const dateB = b.resolvedAt ? new Date(b.resolvedAt).getTime() : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
+			return dateB - dateA;
+		});
+	}, [cardIssuesList, issueAssigneeFilter]);
+
 	const enrollmentTrends = useMemo(() => {
 		// Show enrollment from 2020 to current year
-		const years = [];
+		const allYears = [] as number[];
 		for (let year = 2020; year <= currentYear; year++) {
-			years.push(year);
+			allYears.push(year);
+		}
+		const years = enrollmentYearFilter === "ALL"
+			? allYears
+			: allYears.filter((year) => year === enrollmentYearFilter);
+		if (years.length === 0 && enrollmentYearFilter !== "ALL") {
+			years.push(enrollmentYearFilter);
 		}
 
 		const termFilter = enrollmentTermFilter === "ALL" ? null : enrollmentTermFilter;
+		const selectedDynamicTypeId = enrollmentTypeFilter.startsWith("TYPE:")
+			? enrollmentTypeFilter.replace("TYPE:", "")
+			: null;
 		
 		return years.map(year => {
 			// Get all enrollment records for this year with filters applied
@@ -1064,6 +1269,28 @@ export default function Dashboard() {
 			const latestTheologyTerm = theologyTerms.length > 0 ? Math.max(...theologyTerms) : null;
 			const enrollmentLatest = latestEnrollmentTerm !== null ? (enrollmentTermTotals.get(latestEnrollmentTerm) || 0) : 0;
 			const theologyLatest = latestTheologyTerm !== null ? (theologyTermTotals.get(latestTheologyTerm) || 0) : 0;
+
+			const dynamicTypeTotal = selectedDynamicTypeId
+				? allDynamicEnrollments
+					.filter(item => item.enrollmentTypeId === selectedDynamicTypeId && item.year === year)
+					.filter(item => termFilter === null || item.term === termFilter)
+					.filter(item => enrollmentSchoolFilter === "ALL" || !item.school || item.school === enrollmentSchoolFilter)
+					.filter(item => enrollmentClassFilter === "ALL" || !item.class || item.class === enrollmentClassFilter)
+					.reduce((sum, item) => sum + (item.count || 0), 0)
+				: 0;
+
+			// Per-type totals for ALL mode — each type gets its own data key
+			const dynamicTypeTotals: Record<string, number> = {};
+			if (!selectedDynamicTypeId && enrollmentTypeFilter === "ALL") {
+				enrollmentTypes.forEach(type => {
+					dynamicTypeTotals[`dynamicType_${type.id}`] = allDynamicEnrollments
+						.filter(item => item.enrollmentTypeId === type.id && item.year === year)
+						.filter(item => termFilter === null || item.term === termFilter)
+						.filter(item => enrollmentSchoolFilter === "ALL" || !item.school || item.school === enrollmentSchoolFilter)
+						.filter(item => enrollmentClassFilter === "ALL" || !item.class || item.class === enrollmentClassFilter)
+						.reduce((sum, item) => sum + (item.count || 0), 0);
+				});
+			}
 			
 			// If no data for this year, check WeeklyReport as fallback
 			if (totalEnrollment === 0) {
@@ -1092,15 +1319,76 @@ export default function Dashboard() {
 				};
 			}
 			
-			// Use data from Enrollment and TheologyEnrollment tables
+			// Use data from Enrollment and TheologyEnrollment tables (or selected dynamic type)
+			if (enrollmentTypeFilter === "CORE") {
+				return {
+					year: year.toString(),
+					enrollmentLatest,
+					theologyLatest: 0,
+					isFuture: false,
+				};
+			}
+
+			if (enrollmentTypeFilter === "THEOLOGY") {
+				return {
+					year: year.toString(),
+					enrollmentLatest: 0,
+					theologyLatest,
+					isFuture: false,
+				};
+			}
+
+			if (selectedDynamicTypeId) {
+				return {
+					year: year.toString(),
+					enrollmentLatest: dynamicTypeTotal,
+					theologyLatest: 0,
+					isFuture: false,
+				};
+			}
+
 			return {
 				year: year.toString(),
 				enrollmentLatest,
 				theologyLatest,
 				isFuture: false,
+				...dynamicTypeTotals,
 			};
 		});
-	}, [reports, allEnrollments, allTheologyEnrollments, currentYear, enrollmentSchoolFilter, enrollmentClassFilter, enrollmentTermFilter]);
+	}, [reports, allEnrollments, allTheologyEnrollments, allDynamicEnrollments, enrollmentTypes, currentYear, enrollmentSchoolFilter, enrollmentClassFilter, enrollmentTermFilter, enrollmentYearFilter, enrollmentTypeFilter]);
+
+	const enrollmentSummaryData = useMemo(() => {
+		const totals = enrollmentTrends.reduce(
+			(acc, row) => {
+				acc.enrollment += row.enrollmentLatest || 0;
+				acc.theology += row.theologyLatest || 0;
+				return acc;
+			},
+			{ enrollment: 0, theology: 0 }
+		);
+
+		const rows: Array<{ name: string; value: number }> = [];
+		if (enrollmentSeriesFilter !== "theology") {
+			rows.push({ name: "Enrollment", value: totals.enrollment });
+		}
+		if (enrollmentSeriesFilter !== "enrollment") {
+			rows.push({ name: "Theology", value: totals.theology });
+		}
+		return rows;
+	}, [enrollmentTrends, enrollmentSeriesFilter]);
+
+	const selectedDynamicEnrollmentRecord = useMemo(() => {
+		if (!dynamicEnrollmentTypeId) return null;
+		return dynamicEnrollments.find(
+			item => item.enrollmentTypeId === dynamicEnrollmentTypeId && item.year === selectedYear && item.term === selectedTerm
+		) || null;
+	}, [dynamicEnrollments, dynamicEnrollmentTypeId, selectedYear, selectedTerm]);
+
+	useEffect(() => {
+		if (selectedDynamicEnrollmentRecord) {
+			setDynamicEnrollmentCount(selectedDynamicEnrollmentRecord.count || 0);
+		}
+	}, [selectedDynamicEnrollmentRecord]);
 
 	const p7ChartData = useMemo(() => {
 		// Use new P7 prep + PLE + P6 promotion results data if available, otherwise fall back to old data
@@ -1375,9 +1663,10 @@ export default function Dashboard() {
 		return Array.from(sourceGroups.entries())
 			.map(([source, data]) => ({
 				name: source,
-				value: incomeDisplayMode === "amount" ? data.totalAmount : data.totalPercentage,
+				value: incomeDisplayMode === "amount" ? data.totalAmount : (data.count > 0 ? data.totalPercentage / data.count : 0),
 				totalAmount: data.totalAmount,
-				totalPercentage: data.totalPercentage,
+				totalPercentage: data.count > 0 ? data.totalPercentage / data.count : 0,
+				rawTotalPercentage: data.totalPercentage,
 				count: data.count
 			}))
 			.sort((a, b) => b.value - a.value);
@@ -1407,15 +1696,13 @@ export default function Dashboard() {
 
 	const postReaction = useCallback(
 		async (sectionId: string, type: Reaction["type"], comment?: string) => {
-			if (!currentReportId) return;
-
 			const key = `${sectionId}-${type}`;
 			try {
 				setPostingReaction(prev => ({ ...prev, [key]: true }));
 				const res = await fetch("/api/reactions", {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ sectionId, type, comment, weeklyReportId: currentReportId }),
+					body: JSON.stringify({ sectionId, type, comment, weeklyReportId: currentReportId ?? null }),
 				});
 				if (!res.ok) throw new Error("Failed to save reaction");
 				const saved = await res.json();
@@ -1466,6 +1753,101 @@ export default function Dashboard() {
 		[currentReportId, session?.user?.id]
 	);
 
+	const renderChartReactions = (sectionId: string, label: string) => {
+		const sectionReactions = reactions.filter(r => r.sectionId === sectionId);
+		const thumbsUp = sectionReactions.filter(r => r.type === "THUMBS_UP").length;
+		const thumbsDown = sectionReactions.filter(r => r.type === "THUMBS_DOWN").length;
+		const comments = sectionReactions.filter(r => r.type === "COMMENT");
+		const draft = commentDrafts[sectionId] || "";
+		const isPostingUp = postingReaction[`${sectionId}-THUMBS_UP`] || false;
+		const isPostingDown = postingReaction[`${sectionId}-THUMBS_DOWN`] || false;
+		const isPostingComment = postingReaction[`${sectionId}-COMMENT`] || false;
+		const isTrustee = userRole === "TRUSTEE";
+		const isGM = userRole === "GM";
+		const detailsId = `chart-comments-${sectionId}`;
+
+		return (
+			<div className="mt-4 pt-3 border-t border-gray-200 space-y-3">
+				<div className="flex items-center justify-between gap-2">
+					<div className="flex items-center gap-2">
+						{isTrustee && (
+							<>
+								<button
+									disabled={isPostingUp}
+									onClick={() => postReaction(sectionId, "THUMBS_UP")}
+									className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold border bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:bg-blue-50 disabled:opacity-50"
+								>
+									<HandThumbUpIcon className="w-4 h-4" /> {thumbsUp}
+								</button>
+								<button
+									disabled={isPostingDown}
+									onClick={() => postReaction(sectionId, "THUMBS_DOWN")}
+									className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold border bg-white text-gray-700 border-gray-200 hover:border-red-400 hover:bg-red-50 disabled:opacity-50"
+								>
+									<HandThumbDownIcon className="w-4 h-4" /> {thumbsDown}
+								</button>
+							</>
+						)}
+						<button
+							onClick={() => {
+								const detailsEl = document.getElementById(detailsId);
+								if (detailsEl) detailsEl.toggleAttribute("open");
+							}}
+							className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold border bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:bg-blue-50"
+						>
+							<ChatBubbleLeftRightIcon className="w-4 h-4" /> {comments.length}
+						</button>
+					</div>
+					{isGM && sectionReactions.length > 0 && (
+						<span className="text-[11px] text-gray-500">Seen by trustee</span>
+					)}
+				</div>
+
+				<details id={detailsId} className="group border border-gray-100 rounded-lg bg-gray-50/60 transition-colors">
+					<summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-xs font-semibold text-gray-700">
+						<span>{label} comments</span>
+						<span className="text-gray-500 group-open:hidden">Show</span>
+						<span className="text-gray-500 hidden group-open:block">Hide</span>
+					</summary>
+					<div className="px-3 pb-3 pt-1 space-y-3">
+						<div className="space-y-2 max-h-40 overflow-y-auto">
+							{comments.length === 0 && <p className="text-xs text-gray-500 italic">No comments yet.</p>}
+							{comments.map((c) => (
+								<div key={c.id} className="p-2 rounded-lg bg-white border border-gray-100">
+									<p className="text-xs text-gray-800 leading-snug">{c.comment}</p>
+									<p className="mt-1 text-[10px] text-gray-500">{c.user?.name || "User"} • {new Date(c.createdAt).toLocaleString()}</p>
+								</div>
+							))}
+						</div>
+
+						{(isTrustee || isGM) ? (
+							<div className="flex flex-col gap-2">
+								<label className="text-[11px] font-semibold text-gray-700">{isGM ? "GM note to trustees" : "Add your comment"}</label>
+								<textarea
+									value={draft}
+									onChange={(e) => setCommentDrafts(prev => ({ ...prev, [sectionId]: e.target.value }))}
+									placeholder={isGM ? "Explain this chart to trustees" : "Add a note for the GM"}
+									rows={2}
+									className="w-full px-3 py-2 text-sm font-medium text-gray-900 bg-white placeholder:text-gray-400 border-2 border-gray-200 rounded-lg focus:border-blue-400 focus:ring-2 focus:ring-blue-100 resize-none"
+								/>
+								<div className="flex items-center justify-between">
+									<span className="text-[10px] text-gray-500">{draft.length}/5000</span>
+									<button
+										disabled={!draft.trim() || isPostingComment || draft.length > 5000}
+										onClick={() => postReaction(sectionId, "COMMENT", draft.trim())}
+										className="px-3 py-2 text-sm font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+									>
+										{isPostingComment ? "Saving..." : "Post"}
+									</button>
+								</div>
+							</div>
+						) : null}
+					</div>
+				</details>
+			</div>
+		);
+	};
+
 	const handleUpdateIssueStatus = useCallback(
 		async (issueId: string, newStatus: string) => {
 			try {
@@ -1513,6 +1895,69 @@ export default function Dashboard() {
 		});
 		return ["ALL", ...Array.from(priorities).sort()];
 	}, [tableEvents]);
+
+	const toLocalDateKey = (date: Date) => {
+		return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+	};
+
+	const upcomingEventsForCalendar = useMemo(() => {
+		const today = new Date();
+		today.setHours(0, 0, 0, 0);
+
+		return tableEvents
+			.filter(evt => !completedEventIds.has(evt.id))
+			.map(evt => ({ ...evt, parsedDate: new Date(evt.date) }))
+			.filter(evt => !Number.isNaN(evt.parsedDate.getTime()) && evt.parsedDate >= today)
+			.sort((a, b) => a.parsedDate.getTime() - b.parsedDate.getTime());
+	}, [tableEvents, completedEventIds]);
+
+	const calendarEventMap = useMemo(() => {
+		const eventMap = new Map<string, { count: number; labels: string[] }>();
+		upcomingEventsForCalendar.forEach(evt => {
+			const key = toLocalDateKey(evt.parsedDate);
+			const current = eventMap.get(key) || { count: 0, labels: [] };
+			eventMap.set(key, {
+				count: current.count + 1,
+				labels: [...current.labels, evt.activity],
+			});
+		});
+		return eventMap;
+	}, [upcomingEventsForCalendar]);
+
+	const calendarCells = useMemo(() => {
+		const year = calendarMonth.getFullYear();
+		const month = calendarMonth.getMonth();
+		const firstDayOfMonth = new Date(year, month, 1);
+		const daysInMonth = new Date(year, month + 1, 0).getDate();
+		const startWeekday = firstDayOfMonth.getDay();
+		const prevMonthDays = new Date(year, month, 0).getDate();
+
+		const cells: Array<{ date: Date; inCurrentMonth: boolean }> = [];
+
+		for (let day = startWeekday - 1; day >= 0; day--) {
+			cells.push({
+				date: new Date(year, month - 1, prevMonthDays - day),
+				inCurrentMonth: false,
+			});
+		}
+
+		for (let day = 1; day <= daysInMonth; day++) {
+			cells.push({
+				date: new Date(year, month, day),
+				inCurrentMonth: true,
+			});
+		}
+
+		while (cells.length < 42) {
+			const nextDay = cells.length - (startWeekday + daysInMonth) + 1;
+			cells.push({
+				date: new Date(year, month + 1, nextDay),
+				inCurrentMonth: false,
+			});
+		}
+
+		return cells;
+	}, [calendarMonth]);
 
 	const getUrgencyColor = (daysUntil: number, isCompleted: boolean): string => {
 		if (isCompleted) return "bg-gray-100 text-gray-400";
@@ -1577,6 +2022,72 @@ export default function Dashboard() {
 			setSavingEnrollment(false);
 		}
 	}, [enrollmentForm]);
+
+	const handleAddEnrollmentType = useCallback(async () => {
+		if (!newEnrollmentTypeName.trim()) {
+			alert("Please enter enrollment type name");
+			return;
+		}
+
+		try {
+			setSavingEnrollmentType(true);
+			const response = await fetch("/api/enrollment-types", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ name: newEnrollmentTypeName.trim() }),
+			});
+
+			if (!response.ok) {
+				const errJson = await response.json().catch(() => ({}));
+				throw new Error(errJson.error || "Failed to add enrollment type");
+			}
+
+			setNewEnrollmentTypeName("");
+			handleRefresh();
+		} catch (err) {
+			alert(err instanceof Error ? err.message : "Failed to add enrollment type");
+		} finally {
+			setSavingEnrollmentType(false);
+		}
+	}, [newEnrollmentTypeName, handleRefresh]);
+
+	const handleSaveDynamicEnrollment = useCallback(async () => {
+		if (!dynamicEnrollmentTypeId) {
+			alert("Please select enrollment type");
+			return;
+		}
+		if (dynamicEnrollmentCount < 0) {
+			alert("Count cannot be negative");
+			return;
+		}
+
+		try {
+			setSavingDynamicEnrollment(true);
+			const response = await fetch("/api/dynamic-enrollments", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					enrollmentTypeId: dynamicEnrollmentTypeId,
+					year: selectedYear,
+					term: selectedTerm,
+					count: Number(dynamicEnrollmentCount),
+				}),
+			});
+
+			if (!response.ok) {
+				const errJson = await response.json().catch(() => ({}));
+				throw new Error(errJson.error || "Failed to save enrollment record");
+			}
+
+			// Auto-switch the chart filter so the saved data is immediately visible
+			setEnrollmentTypeFilter(`TYPE:${dynamicEnrollmentTypeId}`);
+			handleRefresh();
+		} catch (err) {
+			alert(err instanceof Error ? err.message : "Failed to save enrollment record");
+		} finally {
+			setSavingDynamicEnrollment(false);
+		}
+	}, [dynamicEnrollmentTypeId, dynamicEnrollmentCount, selectedYear, selectedTerm, handleRefresh, setEnrollmentTypeFilter]);
 
 	const exportToExcel = useCallback(() => {
 		try {
@@ -2036,20 +2547,24 @@ export default function Dashboard() {
 											isTrustee ? (
 												<div className="flex flex-col gap-2">
 													<label className="text-[11px] font-semibold text-gray-700">Add your comment</label>
-													<div className="flex gap-2">
-														<input
+													<div className="space-y-2">
+														<textarea
 															value={draft}
 															onChange={(e) => setCommentDrafts(prev => ({ ...prev, [metric.sectionId]: e.target.value }))}
 															placeholder="Add a note for the GM"
-															className="flex-1 px-3 py-2 text-sm font-medium text-gray-900 bg-white placeholder:text-gray-400 border-2 border-gray-200 rounded-lg focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+															rows={2}
+															className="w-full px-3 py-2 text-sm font-medium text-gray-900 bg-white placeholder:text-gray-400 border-2 border-gray-200 rounded-lg focus:border-blue-400 focus:ring-2 focus:ring-blue-100 resize-none"
 														/>
-														<button
-															disabled={!draft.trim() || isPostingComment}
-															onClick={() => postReaction(metric.sectionId, "COMMENT", draft.trim())}
-															className="px-3 py-2 text-sm font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-														>
-															{isPostingComment ? "Saving..." : "Post"}
-														</button>
+														<div className="flex items-center justify-between">
+															<span className="text-[10px] text-gray-500">{draft.length}/5000</span>
+															<button
+																disabled={!draft.trim() || isPostingComment || draft.length > 5000}
+																onClick={() => postReaction(metric.sectionId, "COMMENT", draft.trim())}
+																className="px-3 py-2 text-sm font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+															>
+																{isPostingComment ? "Saving..." : "Post"}
+															</button>
+														</div>
 													</div>
 												</div>
 											) : isGM ? (
@@ -2062,9 +2577,10 @@ export default function Dashboard() {
 														rows={2}
 														className="w-full px-3 py-2 text-sm font-medium text-gray-900 bg-white placeholder:text-gray-400 border-2 border-gray-200 rounded-lg focus:border-blue-400 focus:ring-2 focus:ring-blue-100 resize-none"
 													/>
-													<div className="flex justify-end">
+													<div className="flex items-center justify-between">
+														<span className="text-[10px] text-gray-500">{draft.length}/5000</span>
 														<button
-															disabled={!draft.trim() || isPostingComment}
+															disabled={!draft.trim() || isPostingComment || draft.length > 5000}
 															onClick={() => postReaction(metric.sectionId, "COMMENT", draft.trim())}
 															className="px-3 py-2 text-sm font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
 														>
@@ -2256,19 +2772,44 @@ export default function Dashboard() {
 				<div className="flex flex-col gap-4 mb-4">
 					<div className="flex items-center justify-between">
 						<div>
-							<h3 className="text-lg font-semibold text-gray-900">Enrollment Trends (2020 - {currentYear})</h3>
+							<h3 className="text-lg font-semibold text-gray-900">
+								Enrollment Trends {enrollmentYearFilter === "ALL" ? `(2020 - ${currentYear})` : `(${enrollmentYearFilter})`}
+							</h3>
 							<p className="text-xs text-gray-500 mt-1">Shows latest-term enrollment totals across all schools and classes (filters apply).</p>
 						</div>
 						{userRole === "GM" && (
-							<button
-								onClick={() => setShowEnrollmentForm(!showEnrollmentForm)}
-								className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-							>
-								{showEnrollmentForm ? "Hide Form" : "Add Historical Data"}
-							</button>
+							<div className="flex items-center gap-2">
+								<Link
+									href="/enrollment-types"
+									className="px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors"
+								>
+									Custom Types
+								</Link>
+								<button
+									onClick={() => setShowEnrollmentForm(!showEnrollmentForm)}
+									className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+								>
+									{showEnrollmentForm ? "Hide Form" : "Add Historical Data"}
+								</button>
+							</div>
 						)}
 					</div>
-					<div className="flex items-center gap-4">
+					<div className="flex flex-wrap items-center gap-4">
+						<div className="flex items-center gap-2">
+							<span className="text-xs text-gray-600 font-medium">Year:</span>
+							<select
+								value={enrollmentYearFilter}
+								onChange={(e) => setEnrollmentYearFilter(e.target.value === "ALL" ? "ALL" : Number(e.target.value))}
+								className="px-3 py-1.5 text-xs font-medium text-gray-900 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
+							>
+								<option value="ALL">All Years</option>
+								{Array.from({ length: currentYear - 2020 + 1 }, (_, i) => 2020 + i)
+									.sort((a, b) => b - a)
+									.map(year => (
+										<option key={year} value={year}>{year}</option>
+									))}
+							</select>
+						</div>
 						<div className="flex items-center gap-2">
 							<span className="text-xs text-gray-600 font-medium">Filter by School:</span>
 							<select
@@ -2318,12 +2859,85 @@ export default function Dashboard() {
 								<option value="P.7">P.7</option>
 							</select>
 						</div>
-						{(enrollmentSchoolFilter !== "ALL" || enrollmentClassFilter !== "ALL" || enrollmentTermFilter !== "ALL") && (
+						<div className="flex items-center gap-2">
+							<span className="text-xs text-gray-600 font-medium">Enrollment Type:</span>
+							<select
+								value={enrollmentTypeFilter}
+								onChange={(e) => setEnrollmentTypeFilter(e.target.value)}
+								className="px-3 py-1.5 text-xs font-medium text-gray-900 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
+							>
+								<option value="ALL">All Types</option>
+								<option value="CORE">Core Enrollment</option>
+								<option value="THEOLOGY">Theology Enrollment</option>
+								{enrollmentTypes.map(type => (
+									<option key={type.id} value={`TYPE:${type.id}`}>{type.name}</option>
+								))}
+							</select>
+						</div>
+						<div className="flex items-center gap-2 border-l border-gray-300 pl-4">
+							<span className="text-xs text-gray-600 font-medium">Display:</span>
+							<button
+								onClick={() => setEnrollmentSeriesFilter("both")}
+								className={`px-3 py-1.5 text-xs font-medium rounded-lg ${
+									enrollmentSeriesFilter === "both"
+										? "bg-blue-600 text-white"
+										: "bg-gray-100 text-gray-700 hover:bg-gray-200"
+								}`}
+							>
+								Both
+							</button>
+							<button
+								onClick={() => setEnrollmentSeriesFilter("enrollment")}
+								className={`px-3 py-1.5 text-xs font-medium rounded-lg ${
+									enrollmentSeriesFilter === "enrollment"
+										? "bg-blue-600 text-white"
+										: "bg-gray-100 text-gray-700 hover:bg-gray-200"
+								}`}
+							>
+								Enrollment
+							</button>
+							<button
+								onClick={() => setEnrollmentSeriesFilter("theology")}
+								className={`px-3 py-1.5 text-xs font-medium rounded-lg ${
+									enrollmentSeriesFilter === "theology"
+										? "bg-blue-600 text-white"
+										: "bg-gray-100 text-gray-700 hover:bg-gray-200"
+								}`}
+							>
+								Theology
+							</button>
+						</div>
+						<div className="flex items-center gap-2 border-l border-gray-300 pl-4">
+							<span className="text-xs text-gray-600 font-medium">View:</span>
+							<button
+								onClick={() => setEnrollmentView("by-year")}
+								className={`px-3 py-1.5 text-xs font-medium rounded-lg ${
+									enrollmentView === "by-year"
+										? "bg-purple-600 text-white"
+										: "bg-gray-100 text-gray-700 hover:bg-gray-200"
+								}`}
+							>
+								By Year
+							</button>
+							<button
+								onClick={() => setEnrollmentView("total")}
+								className={`px-3 py-1.5 text-xs font-medium rounded-lg ${
+									enrollmentView === "total"
+										? "bg-purple-600 text-white"
+										: "bg-gray-100 text-gray-700 hover:bg-gray-200"
+								}`}
+							>
+								Total Summary
+							</button>
+						</div>
+						{(enrollmentSchoolFilter !== "ALL" || enrollmentClassFilter !== "ALL" || enrollmentTermFilter !== "ALL" || enrollmentYearFilter !== "ALL" || enrollmentTypeFilter !== "ALL") && (
 							<button
 								onClick={() => {
 									setEnrollmentSchoolFilter("ALL");
 									setEnrollmentClassFilter("ALL");
 									setEnrollmentTermFilter("ALL");
+									setEnrollmentYearFilter("ALL");
+									setEnrollmentTypeFilter("ALL");
 								}}
 								className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
 							>
@@ -2382,17 +2996,45 @@ export default function Dashboard() {
 						</div>
 					)}
 
-					<ResponsiveContainer width="100%" height={400}>
-						<LineChart data={enrollmentTrends}>
-							<CartesianGrid strokeDasharray="3 3" />
-							<XAxis dataKey="year" label={{ value: 'Year', position: 'insideBottom', offset: -5 }} />
-							<YAxis label={{ value: 'Enrollment', angle: -90, position: 'insideLeft' }} />
-							<Tooltip />
-							<Legend />
-							<Line type="monotone" dataKey="enrollmentLatest" stroke="#2563eb" strokeWidth={2} name="Enrollment (Latest Term)" />
-							<Line type="monotone" dataKey="theologyLatest" stroke="#7c3aed" strokeWidth={2} name="Theology (Latest Term)" />
-						</LineChart>
-					</ResponsiveContainer>
+					{enrollmentView === "by-year" ? (
+						<ResponsiveContainer width="100%" height={400}>
+							<LineChart data={enrollmentTrends}>
+								<CartesianGrid strokeDasharray="3 3" />
+								<XAxis dataKey="year" label={{ value: "Year", position: "insideBottom", offset: -5 }} />
+								<YAxis label={{ value: "Enrollment", angle: -90, position: "insideLeft" }} />
+								<Tooltip />
+								<Legend />
+								{enrollmentSeriesFilter !== "theology" && (
+									<Line type="monotone" dataKey="enrollmentLatest" stroke="#2563eb" strokeWidth={2} name="Enrollment (Latest Term)" />
+								)}
+								{enrollmentSeriesFilter !== "enrollment" && (
+									<Line type="monotone" dataKey="theologyLatest" stroke="#7c3aed" strokeWidth={2} name="Theology (Latest Term)" />
+								)}
+								{enrollmentTypeFilter === "ALL" && enrollmentTypes.map((type, i) => {
+									const DYNAMIC_COLORS = ["#059669", "#d97706", "#dc2626", "#0891b2", "#be185d", "#4f46e5", "#0d9488"];
+									return (
+										<Line key={type.id} type="monotone" dataKey={`dynamicType_${type.id}`} stroke={DYNAMIC_COLORS[i % DYNAMIC_COLORS.length]} strokeWidth={2} name={type.name} />
+									);
+								})}
+							</LineChart>
+						</ResponsiveContainer>
+					) : (
+						<ResponsiveContainer width="100%" height={360}>
+							<BarChart data={enrollmentSummaryData}>
+								<CartesianGrid strokeDasharray="3 3" />
+								<XAxis dataKey="name" />
+								<YAxis label={{ value: "Total Enrollment", angle: -90, position: "insideLeft" }} />
+								<Tooltip formatter={(value) => Number(value).toLocaleString()} />
+								<Legend />
+								<Bar dataKey="value" name="Total">
+									{enrollmentSummaryData.map((entry, index) => (
+										<Cell key={`cell-${index}`} fill={entry.name === "Enrollment" ? "#2563eb" : "#7c3aed"} />
+									))}
+								</Bar>
+							</BarChart>
+						</ResponsiveContainer>
+					)}
+					{renderChartReactions("chart-enrollment-trends", "Enrollment trends")}
 				</div>
 
 				<div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-8">
@@ -2401,7 +3043,28 @@ export default function Dashboard() {
 							<h3 className="text-lg font-semibold text-gray-900">P.7 Prep Exams (DIV 1)</h3>
 							<p className="text-sm text-gray-600">Division 1 percentage trends across prep exams; table shows last 3 years.</p>
 						</div>
-						<div className="flex items-center gap-3">
+						<div className="flex items-center gap-3 flex-wrap">
+							<div className="flex items-center gap-2">
+								<span className="text-xs text-gray-600">Prep:</span>
+								<select
+									value={p7PrepFilter}
+									onChange={(e) => setP7PrepFilter(e.target.value)}
+									className="px-2 py-1 text-xs font-bold text-gray-900 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
+								>
+									<option value="ALL">All Preps</option>
+									<option value="Promotion">Promotion</option>
+									<option value="Prep 1">Prep 1</option>
+									<option value="Prep 2">Prep 2</option>
+									<option value="Prep 3">Prep 3</option>
+									<option value="Prep 4">Prep 4</option>
+									<option value="Prep 5">Prep 5</option>
+									<option value="Prep 6">Prep 6</option>
+									<option value="Prep 7">Prep 7</option>
+									<option value="Prep 8">Prep 8</option>
+									<option value="Prep 9">Prep 9</option>
+									<option value="PLE">PLE</option>
+								</select>
+							</div>
 							<div className="flex items-center gap-2">
 								<span className="text-xs text-gray-600">Years:</span>
 								<select
@@ -2409,8 +3072,6 @@ export default function Dashboard() {
 									onChange={(e) => {
 										const value = Number(e.target.value);
 										setP7YearsWindow(value);
-										// Auto-switch to bar chart for filtered views, line for all years
-										setP7ChartType(value === 999 ? "line" : "bar");
 									}}
 									className="px-2 py-1 text-xs font-bold text-gray-900 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
 								>
@@ -2446,47 +3107,51 @@ export default function Dashboard() {
 						</div>
 					</div>
 					<div className="mb-4">
-						<ResponsiveContainer width="100%" height={360}>
-							{p7ChartType === "line" ? (
-								<LineChart data={p7ChartData}>
-									<CartesianGrid strokeDasharray="3 3" />
-									<XAxis dataKey="year" />
-									<YAxis />
-									<Tooltip />
-									<Legend wrapperStyle={{ fontSize: "12px" }} />
-									<Line type="monotone" dataKey="Promotion" stroke="#ef4444" strokeWidth={2} dot={false} />
-									<Line type="monotone" dataKey="Prep 1" stroke="#f97316" strokeWidth={2} dot={false} />
-									<Line type="monotone" dataKey="Prep 2" stroke="#eab308" strokeWidth={2} dot={false} />
-									<Line type="monotone" dataKey="Prep 3" stroke="#84cc16" strokeWidth={2} dot={false} />
-									<Line type="monotone" dataKey="Prep 4" stroke="#22c55e" strokeWidth={2} dot={false} />
-									<Line type="monotone" dataKey="Prep 5" stroke="#10b981" strokeWidth={2} dot={false} />
-									<Line type="monotone" dataKey="Prep 6" stroke="#14b8a6" strokeWidth={2} dot={false} />
-									<Line type="monotone" dataKey="Prep 7" stroke="#06b6d4" strokeWidth={2} dot={false} />
-									<Line type="monotone" dataKey="Prep 8" stroke="#0ea5e9" strokeWidth={2} dot={false} />
-									<Line type="monotone" dataKey="Prep 9" stroke="#3b82f6" strokeWidth={2} dot={false} />
-									<Line type="monotone" dataKey="PLE" stroke="#6366f1" strokeWidth={2} dot={false} />
-								</LineChart>
-							) : (
-								<BarChart data={p7ChartData}>
-									<CartesianGrid strokeDasharray="3 3" />
-									<XAxis dataKey="year" />
-									<YAxis />
-									<Tooltip />
-									<Legend wrapperStyle={{ fontSize: "12px" }} />
-									<Bar dataKey="Promotion" fill="#ef4444" />
-									<Bar dataKey="Prep 1" fill="#f97316" />
-									<Bar dataKey="Prep 2" fill="#eab308" />
-									<Bar dataKey="Prep 3" fill="#84cc16" />
-									<Bar dataKey="Prep 4" fill="#22c55e" />
-									<Bar dataKey="Prep 5" fill="#10b981" />
-									<Bar dataKey="Prep 6" fill="#14b8a6" />
-									<Bar dataKey="Prep 7" fill="#06b6d4" />
-									<Bar dataKey="Prep 8" fill="#0ea5e9" />
-									<Bar dataKey="Prep 9" fill="#3b82f6" />
-									<Bar dataKey="PLE" fill="#6366f1" />
-								</BarChart>
-							)}
-						</ResponsiveContainer>
+						{(() => {
+							const P7_SERIES: { key: string; color: string }[] = [
+								{ key: "Promotion", color: "#ef4444" },
+								{ key: "Prep 1",    color: "#f97316" },
+								{ key: "Prep 2",    color: "#eab308" },
+								{ key: "Prep 3",    color: "#84cc16" },
+								{ key: "Prep 4",    color: "#22c55e" },
+								{ key: "Prep 5",    color: "#10b981" },
+								{ key: "Prep 6",    color: "#14b8a6" },
+								{ key: "Prep 7",    color: "#06b6d4" },
+								{ key: "Prep 8",    color: "#0ea5e9" },
+								{ key: "Prep 9",    color: "#3b82f6" },
+								{ key: "PLE",       color: "#6366f1" },
+							];
+							const activeSeries = p7PrepFilter === "ALL"
+								? P7_SERIES
+								: P7_SERIES.filter(s => s.key === p7PrepFilter);
+							return (
+								<ResponsiveContainer width="100%" height={360}>
+									{p7ChartType === "line" ? (
+										<LineChart data={p7ChartData}>
+											<CartesianGrid strokeDasharray="3 3" />
+											<XAxis dataKey="year" />
+											<YAxis />
+											<Tooltip />
+											<Legend wrapperStyle={{ fontSize: "12px" }} />
+											{activeSeries.map(s => (
+												<Line key={s.key} type="monotone" dataKey={s.key} stroke={s.color} strokeWidth={2} dot={false} />
+											))}
+										</LineChart>
+									) : (
+										<BarChart data={p7ChartData}>
+											<CartesianGrid strokeDasharray="3 3" />
+											<XAxis dataKey="year" />
+											<YAxis />
+											<Tooltip />
+											<Legend wrapperStyle={{ fontSize: "12px" }} />
+											{activeSeries.map(s => (
+												<Bar key={s.key} dataKey={s.key} fill={s.color} />
+											))}
+										</BarChart>
+									)}
+								</ResponsiveContainer>
+							);
+						})()}
 					</div>
 					<div className="overflow-x-auto">
 						<table className="min-w-full text-sm">
@@ -2526,6 +3191,7 @@ export default function Dashboard() {
 							</tbody>
 						</table>
 					</div>
+					{renderChartReactions("chart-p7-prep", "P.7 prep chart")}
 				</div>
 
 				<div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-8">
@@ -2722,15 +3388,14 @@ export default function Dashboard() {
 								incomeChartData.map((item, idx) => {
 									const dataKeys = Object.keys(item).filter(k => k !== "name");
 									const totalAmount = dataKeys.reduce((sum, k) => sum + Number(item[k]), 0);
-									
-									// Get percentage values
-									const sourceIncomes = incomes.filter(inc => 
-										inc.source === item.name && 
+									const sourceIncomes = incomes.filter(inc =>
+										inc.source === item.name &&
 										(incomeYearFilter === "ALL" || inc.year === incomeYearFilter) &&
 										(incomeTermFilter === "ALL" || (inc as any).term === incomeTermFilter)
 									);
-									const totalPercentage = sourceIncomes.reduce((sum, inc) => sum + inc.percentage, 0);
-									
+									const avgPercentage = sourceIncomes.length > 0
+										? sourceIncomes.reduce((sum, inc) => sum + (inc.percentage || 0), 0) / sourceIncomes.length
+										: 0;
 									return (
 										<div key={idx} className="p-3 bg-gray-50 rounded-lg">
 											<p className="text-xs font-medium text-gray-700">{item.name as string}</p>
@@ -2740,13 +3405,13 @@ export default function Dashboard() {
 														{totalAmount.toLocaleString()}
 													</p>
 													<p className="text-[10px] text-gray-500 mt-0.5">
-														{totalPercentage.toFixed(1)}%
+														{avgPercentage.toFixed(1)}%
 													</p>
 												</>
 											) : (
 												<>
 													<p className="text-sm font-semibold text-gray-900">
-														{totalPercentage.toFixed(1)}%
+														{avgPercentage.toFixed(1)}%
 													</p>
 													<p className="text-[10px] text-gray-500 mt-0.5">
 														{totalAmount.toLocaleString()}
@@ -2789,59 +3454,71 @@ export default function Dashboard() {
 
 						{/* Term Averages Chart */}
 						{incomeTermAverages.length > 0 && (
-							<div className="mt-8 pt-8 border-t border-gray-200">
-								<h4 className="text-md font-semibold text-gray-900 mb-4">Average by Term/Period</h4>
-								<ResponsiveContainer width="100%" height={300}>
-									<BarChart data={incomeTermAverages}>
-										<CartesianGrid strokeDasharray="3 3" />
-										<XAxis dataKey="name" />
-										<YAxis label={{ value: incomeDisplayMode === "amount" ? "Average Amount" : "Average %", angle: -90, position: "insideLeft" }} />
-										<Tooltip 
-											formatter={(value, name) => {
-												if (name === "Average Amount") return `${Number(value).toLocaleString()} UGX`;
-												if (name === "Average Percentage") return `${Number(value).toFixed(1)}%`;
-												return value;
-											}}
-										/>
-										<Legend />
-										{incomeDisplayMode === "amount" ? (
-											<Bar dataKey="avgAmount" fill="#3b82f6" name="Average Amount" />
-										) : (
-											<Bar dataKey="avgPercentage" fill="#10b981" name="Average Percentage" />
-										)}
-									</BarChart>
-								</ResponsiveContainer>
-								<div className="mt-4 grid grid-cols-3 gap-4">
-									{incomeTermAverages.map((item, idx) => (
-										<div key={idx} className="p-3 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg border border-blue-200">
-											<p className="text-xs font-medium text-blue-900">{item.name}</p>
-											{incomeDisplayMode === "amount" ? (
-												<>
-													<p className="text-lg font-bold text-blue-900">
-														{item.avgAmount.toLocaleString()} UGX
+							<div className="mt-6 pt-6 border-t border-gray-200">
+								<button
+									onClick={() => setShowTermAverages(v => !v)}
+									className="flex items-center gap-2 text-sm font-semibold text-gray-700 hover:text-blue-600 transition-colors mb-3"
+								>
+									<span>{showTermAverages ? "▾" : "▸"}</span>
+									<span>Average by Term/Period</span>
+									<span className="text-xs font-normal text-gray-500">{showTermAverages ? "(click to hide)" : "(click to show)"}</span>
+								</button>
+								{showTermAverages && (
+									<>
+										<ResponsiveContainer width="100%" height={300}>
+											<BarChart data={incomeTermAverages}>
+												<CartesianGrid strokeDasharray="3 3" />
+												<XAxis dataKey="name" />
+												<YAxis label={{ value: incomeDisplayMode === "amount" ? "Average Amount" : "Average %", angle: -90, position: "insideLeft" }} />
+												<Tooltip 
+													formatter={(value, name) => {
+														if (name === "Average Amount") return `${Number(value).toLocaleString()} UGX`;
+														if (name === "Average Percentage") return `${Number(value).toFixed(1)}%`;
+														return value;
+													}}
+												/>
+												<Legend />
+												{incomeDisplayMode === "amount" ? (
+													<Bar dataKey="avgAmount" fill="#3b82f6" name="Average Amount" />
+												) : (
+													<Bar dataKey="avgPercentage" fill="#10b981" name="Average Percentage" />
+												)}
+											</BarChart>
+										</ResponsiveContainer>
+										<div className="mt-4 grid grid-cols-3 gap-4">
+											{incomeTermAverages.map((item, idx) => (
+												<div key={idx} className="p-3 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg border border-blue-200">
+													<p className="text-xs font-medium text-blue-900">{item.name}</p>
+													{incomeDisplayMode === "amount" ? (
+														<>
+															<p className="text-lg font-bold text-blue-900">
+																{item.avgAmount.toLocaleString()} UGX
+															</p>
+															<p className="text-xs text-blue-700 mt-1">
+																Avg %: {item.avgPercentage.toFixed(1)}%
+															</p>
+														</>
+													) : (
+														<>
+															<p className="text-lg font-bold text-blue-900">
+																{item.avgPercentage.toFixed(1)}%
+															</p>
+															<p className="text-xs text-blue-700 mt-1">
+																Avg Amount: {item.avgAmount.toLocaleString()} UGX
+															</p>
+														</>
+													)}
+													<p className="text-xs text-blue-600 mt-1">
+														{item.count} {item.count === 1 ? 'entry' : 'entries'}
 													</p>
-													<p className="text-xs text-blue-700 mt-1">
-														Avg %: {item.avgPercentage.toFixed(1)}%
-													</p>
-												</>
-											) : (
-												<>
-													<p className="text-lg font-bold text-blue-900">
-														{item.avgPercentage.toFixed(1)}%
-													</p>
-													<p className="text-xs text-blue-700 mt-1">
-														Avg Amount: {item.avgAmount.toLocaleString()} UGX
-													</p>
-												</>
-											)}
-											<p className="text-xs text-blue-600 mt-1">
-												{item.count} {item.count === 1 ? 'entry' : 'entries'}
-											</p>
+												</div>
+											))}
 										</div>
-									))}
-								</div>
+									</>
+								)}
 							</div>
 						)}
+						{renderChartReactions("chart-other-income", "Other income chart")}
 					</div>
 				) : (
 					<div className="h-[300px] flex items-center justify-center text-gray-500">
@@ -2852,41 +3529,37 @@ export default function Dashboard() {
 
 			<div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
 				<div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+					{/* ── Red Issues Header ─────────────────────────────────── */}
 					<div className="flex flex-col gap-3 mb-4">
-						<div className="flex items-center justify-between gap-2">
+						<div className="flex items-center justify-between gap-2 flex-wrap">
 							<h3 className="text-lg font-semibold text-gray-900">Red Issues</h3>
 							<div className="flex items-center gap-2 text-xs font-semibold">
-								<span className="px-2 py-1 rounded-full bg-red-100 text-red-800">Open {statusCounts.OPEN || 0}</span>
-								<span className="px-2 py-1 rounded-full bg-yellow-100 text-yellow-800">In Progress {statusCounts.IN_PROGRESS || 0}</span>
-								<span className="px-2 py-1 rounded-full bg-green-100 text-green-800">Resolved {statusCounts.RESOLVED || 0}</span>
+								<span className="px-2 py-1 rounded-full bg-red-100 text-red-800">Open {activeCardIssues.filter(i => (i.status || "OPEN") === "OPEN").length}</span>
+								<span className="px-2 py-1 rounded-full bg-yellow-100 text-yellow-800">In Progress {activeCardIssues.filter(i => i.status === "IN_PROGRESS").length}</span>
+								<span className="px-2 py-1 rounded-full bg-green-100 text-green-800">Resolved {resolvedCardIssues.length}</span>
 							</div>
 						</div>
 						<div className="flex flex-wrap items-center gap-2">
-							<div className="flex items-center gap-1.5">
-								{["ALL", "OPEN", "IN_PROGRESS", "RESOLVED"].map(status => (
-									<button
-										key={status}
-										onClick={() => setIssueStatusFilter(status as typeof issueStatusFilter)}
-										className={`px-2.5 py-1 text-xs font-semibold rounded-full transition-colors ${
-											issueStatusFilter === status
-												? status === "ALL" ? "bg-gray-700 text-white" : status === "OPEN" ? "bg-red-500 text-white" : status === "IN_PROGRESS" ? "bg-yellow-500 text-white" : "bg-green-500 text-white"
-												: "bg-gray-100 text-gray-700 hover:bg-gray-200"
-										}`}
-									>
-										{status === "ALL" ? "All" : status === "IN_PROGRESS" ? "In Progress" : status}
-									</button>
-								))}
-							</div>
+							{availableIssueYears.length > 0 && (
+								<select
+									value={issuesCardYear === "ALL" ? "ALL" : String(issuesCardYear)}
+									onChange={(e) => { setIssuesCardYear(e.target.value === "ALL" ? "ALL" : Number(e.target.value)); setShowMoreActiveIssues(false); setShowResolvedIssues(false); }}
+									className="px-3 py-2 text-xs font-bold border-2 border-blue-300 rounded-lg bg-blue-50 text-blue-900 hover:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+									title="Filter by year"
+								>
+									<option value="ALL">All Years</option>
+									{availableIssueYears.map(y => <option key={y} value={y}>{y}</option>)}
+								</select>
+							)}
 							<select
 								value={issueAssigneeFilter}
 								onChange={(e) => setIssueAssigneeFilter(e.target.value)}
 								className="px-3 py-2 text-xs font-bold border-2 border-gray-400 rounded-lg bg-gray-50 text-gray-900 hover:border-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
 							>
 								{issueAssignees.map(name => (
-									<option key={name} value={name}>{name === "ALL" ? "All" : name}</option>
+									<option key={name} value={name}>{name === "ALL" ? "All Assigned" : name}</option>
 								))}
 							</select>
-
 							<select
 								value={issueSort}
 								onChange={(e) => setIssueSort(e.target.value as typeof issueSort)}
@@ -2899,191 +3572,189 @@ export default function Dashboard() {
 						</div>
 					</div>
 
-					{filteredIssueList.length === 0 ? (
-						<p className="text-gray-500 text-center py-8">No issues match these filters</p>
+					{/* ── Active Issues (Open + In Progress) ───────────────── */}
+					{activeCardIssues.length === 0 ? (
+						<p className="text-gray-500 text-center py-8">No open issues{issuesCardYear !== "ALL" ? ` for ${issuesCardYear}` : ""}</p>
 					) : (
-						<div className="space-y-0 max-h-[400px] overflow-y-auto">
-							{filteredIssueList.map((issue, index) => {
-								const status = issue.status || "OPEN";
-								const statusColorMap: Record<string, { bg: string; text: string }> = {
-									OPEN: { bg: "bg-red-100", text: "text-red-800" },
-									IN_PROGRESS: { bg: "bg-yellow-100", text: "text-yellow-800" },
-									RESOLVED: { bg: "bg-green-100", text: "text-green-800" },
-								};
-								const statusColors = statusColorMap[status] || statusColorMap.OPEN;
-								const ageDays = (() => {
-									const days = daysBetween(issue.createdAt, issue.resolvedAt);
-									return days == null ? "—" : `${days} day${days === 1 ? "" : "s"}`;
-								})();
-								const title = issue.issue || issue.title || "Untitled issue";
-								const isGM = userRole === "GM";
-								const isTrustee = userRole === "TRUSTEE";
-								const canUpdate = isGM && status !== "RESOLVED";
+						<>
+							<div className="space-y-0 max-h-[280px] overflow-y-auto pr-1">
+								{(showMoreActiveIssues ? activeCardIssues : activeCardIssues.slice(0, 5)).map((issue, index, arr) => {
+									const status = issue.status || "OPEN";
+									const statusColorMap: Record<string, { bg: string; text: string }> = {
+										OPEN: { bg: "bg-red-100", text: "text-red-800" },
+										IN_PROGRESS: { bg: "bg-yellow-100", text: "text-yellow-800" },
+										RESOLVED: { bg: "bg-green-100", text: "text-green-800" },
+									};
+									const statusColors = statusColorMap[status] || statusColorMap.OPEN;
+									const ageDays = (() => {
+										const days = daysBetween(issue.createdAt, issue.resolvedAt);
+										return days == null ? "—" : `${days} day${days === 1 ? "" : "s"}`;
+									})();
+									const title = issue.issue || issue.title || "Untitled issue";
+									const isGM = userRole === "GM";
+									const isTrustee = userRole === "TRUSTEE";
+									const canUpdate = isGM && status !== "RESOLVED";
+									const sectionId = `red-issue-${issue.id}`;
+									const sectionReactions = reactions.filter(r => r.sectionId === sectionId);
+									const thumbsUp = sectionReactions.filter(r => r.type === "THUMBS_UP").length;
+									const thumbsDown = sectionReactions.filter(r => r.type === "THUMBS_DOWN").length;
+									const comments = sectionReactions.filter(r => r.type === "COMMENT");
+									const draft = commentDrafts[sectionId] || "";
+									const isPostingUp = postingReaction[`${sectionId}-THUMBS_UP`] || false;
+									const isPostingDown = postingReaction[`${sectionId}-THUMBS_DOWN`] || false;
+									const isPostingComment = postingReaction[`${sectionId}-COMMENT`] || false;
 
-								const sectionId = `red-issue-${issue.id}`;
-								const sectionReactions = reactions.filter(r => r.sectionId === sectionId);
-								const thumbsUp = sectionReactions.filter(r => r.type === "THUMBS_UP").length;
-								const thumbsDown = sectionReactions.filter(r => r.type === "THUMBS_DOWN").length;
-								const comments = sectionReactions.filter(r => r.type === "COMMENT");
-								const draft = commentDrafts[sectionId] || "";
-								const isPostingUp = postingReaction[`${sectionId}-THUMBS_UP`] || false;
-								const isPostingDown = postingReaction[`${sectionId}-THUMBS_DOWN`] || false;
-								const isPostingComment = postingReaction[`${sectionId}-COMMENT`] || false;
-
-								return (
-									<div key={issue.id}>
-										<div className="flex items-start gap-4 py-4">
-											<div className="flex items-start gap-2 flex-shrink-0">
-												<span
-													className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusColors.bg} ${statusColors.text}`}
-												>
-													{status.replace(/_/g, " ")}
-												</span>
-												{canUpdate && (
-													<select
-														value={status}
-														onChange={(e) => handleUpdateIssueStatus(issue.id, e.target.value)}
-														disabled={updatingIssueId === issue.id}
-														className="px-3 py-1 text-xs font-bold rounded-lg border-2 border-gray-400 bg-gray-50 text-gray-900 hover:border-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer transition-all shadow-sm w-28"
-														title="Change status"
-													>
-														<option value={status} disabled>
-															{status.replace(/_/g, " ")}
-														</option>
-														{status === "OPEN" && (
-															<>
-																<option value="IN_PROGRESS">In Progress</option>
-																<option value="RESOLVED">Resolved</option>
-															</>
-														)}
-														{status === "IN_PROGRESS" && (
-															<option value="RESOLVED">Resolved</option>
-														)}
-													</select>
-												)}
-											</div>
-											<div className="flex-1 min-w-0">
-												<p className="font-bold text-gray-900 text-sm leading-5 truncate" title={title}>
-													{title}
-												</p>
-												<p className="text-xs text-gray-600 mt-1">{issue.inCharge || "Unassigned"}</p>
-												<p className="text-[11px] text-gray-500 mt-1">
-													Posted <span className="font-medium text-gray-700">{formatDate(issue.createdAt)}</span>
-													• {status === "RESOLVED" ? "Resolved after" : "Open for"} {ageDays}
-												</p>
-
-												{/* Trustee Reactions */}
-												{isTrustee && (
-													<div className="flex items-center gap-2 mt-2">
-														<button
-															disabled={isPostingUp}
-															onClick={() => postReaction(sectionId, "THUMBS_UP")}
-															className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border transition-colors bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:bg-blue-50"
+									return (
+										<div key={issue.id}>
+											<div className="flex items-start gap-4 py-4">
+												<div className="flex items-start gap-2 flex-shrink-0">
+													<span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusColors.bg} ${statusColors.text}`}>
+														{status.replace(/_/g, " ")}
+													</span>
+													{canUpdate && (
+														<select
+															value={status}
+															onChange={(e) => handleUpdateIssueStatus(issue.id, e.target.value)}
+															disabled={updatingIssueId === issue.id}
+															className="px-3 py-1 text-xs font-bold rounded-lg border-2 border-gray-400 bg-gray-50 text-gray-900 hover:border-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer transition-all shadow-sm w-28"
+															title="Change status"
 														>
-															👍 {thumbsUp}
-														</button>
-														<button
-															disabled={isPostingDown}
-															onClick={() => postReaction(sectionId, "THUMBS_DOWN")}
-															className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border transition-colors bg-white text-gray-700 border-gray-200 hover:border-red-400 hover:bg-red-50"
-														>
-															👎 {thumbsDown}
-														</button>
-														<button
-															onClick={() => {
-																const detailsEl = document.getElementById(`issue-comments-${issue.id}`);
-																if (detailsEl) detailsEl.toggleAttribute("open");
-															}}
-															className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border transition-colors bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:bg-blue-50"
-														>
-															💬 {comments.length}
-														</button>
-													</div>
-												)}
-
-												{/* GM View */}
-												{isGM && sectionReactions.length > 0 && (
-													<div className="flex items-center gap-2 mt-2">
-														<span className="text-xs text-gray-600">👍 {thumbsUp} 👎 {thumbsDown} 💬 {comments.length}</span>
-													</div>
-												)}
-
-												{/* Comments Section */}
-												{(isTrustee || isGM) && (
-													<details id={`issue-comments-${issue.id}`} className="mt-2">
-														<summary className="text-xs text-blue-600 cursor-pointer hover:underline">
-															{comments.length > 0 ? `View ${comments.length} comment(s)` : "Add comment"}
-														</summary>
-														<div className="mt-2 space-y-2">
-															{comments.map((c) => (
-																<div key={c.id} className="p-2 rounded bg-gray-50 border border-gray-200">
-																	<p className="text-xs text-gray-800">{c.comment}</p>
-																	<p className="mt-1 text-[10px] text-gray-500">
-																		{c.user?.name || "User"} • {new Date(c.createdAt).toLocaleString()}
-																	</p>
-																</div>
-															))}
-															{isTrustee && (
-																<div className="flex gap-2">
-																	<input
-																		value={draft}
-																		onChange={(e) => setCommentDrafts(prev => ({ ...prev, [sectionId]: e.target.value }))}
-																		placeholder="Add a comment"
-																		className="flex-1 px-2 py-1 text-xs text-gray-900 border rounded"
-																	/>
-																	<button
-																		disabled={!draft.trim() || isPostingComment}
-																		onClick={() => postReaction(sectionId, "COMMENT", draft.trim())}
-																		className="px-2 py-1 text-xs font-semibold rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-																	>
-																		Post
-																	</button>
-																</div>
-															)}
+															<option value={status} disabled>{status.replace(/_/g, " ")}</option>
+															{status === "OPEN" && (<><option value="IN_PROGRESS">In Progress</option><option value="RESOLVED">Resolved</option></>)}
+															{status === "IN_PROGRESS" && (<option value="RESOLVED">Resolved</option>)}
+														</select>
+													)}
+												</div>
+												<div className="flex-1 min-w-0">
+													<p className="font-bold text-gray-900 text-sm leading-5 truncate" title={title}>{title}</p>
+													<p className="text-xs text-gray-600 mt-1">{issue.inCharge || "Unassigned"}</p>
+													<p className="text-[11px] text-gray-500 mt-1">
+														Posted <span className="font-medium text-gray-700">{formatDate(issue.createdAt)}</span>
+														{issue.year && issuesCardYear === "ALL" && <span className="ml-1 text-gray-400">({issue.year})</span>}
+														• Open for {ageDays}
+													</p>
+													{isTrustee && (
+														<div className="flex items-center gap-2 mt-2">
+															<button disabled={isPostingUp} onClick={() => postReaction(sectionId, "THUMBS_UP")} className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border transition-colors bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:bg-blue-50">👍 {thumbsUp}</button>
+															<button disabled={isPostingDown} onClick={() => postReaction(sectionId, "THUMBS_DOWN")} className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border transition-colors bg-white text-gray-700 border-gray-200 hover:border-red-400 hover:bg-red-50">👎 {thumbsDown}</button>
+															<button onClick={() => { const el = document.getElementById(`issue-comments-${issue.id}`); if (el) el.toggleAttribute("open"); }} className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border transition-colors bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:bg-blue-50">💬 {comments.length}</button>
 														</div>
-													</details>
-												)}
+													)}
+													{isGM && sectionReactions.length > 0 && (
+														<div className="flex items-center gap-2 mt-2">
+															<span className="text-xs text-gray-600">👍 {thumbsUp} 👎 {thumbsDown} 💬 {comments.length}</span>
+														</div>
+													)}
+													{(isTrustee || isGM) && (
+														<details id={`issue-comments-${issue.id}`} className="mt-2">
+															<summary className="text-xs text-blue-600 cursor-pointer hover:underline">
+																{comments.length > 0 ? `View ${comments.length} comment(s)` : "Add comment"}
+															</summary>
+															<div className="mt-2 space-y-2">
+																{comments.map((c) => (
+																	<div key={c.id} className="p-2 rounded bg-gray-50 border border-gray-200">
+																		<p className="text-xs text-gray-800">{c.comment}</p>
+																		<p className="mt-1 text-[10px] text-gray-500">{c.user?.name || "User"} • {new Date(c.createdAt).toLocaleString()}</p>
+																	</div>
+																))}
+																{isTrustee && (
+																	<div className="space-y-2">
+																		<textarea value={draft} onChange={(e) => setCommentDrafts(prev => ({ ...prev, [sectionId]: e.target.value }))} placeholder="Add a comment" rows={2} className="w-full px-2 py-1.5 text-xs text-gray-900 border rounded resize-none" />
+																		<div className="flex items-center justify-between">
+																			<span className="text-[10px] text-gray-500">{draft.length}/5000</span>
+																			<button disabled={!draft.trim() || isPostingComment || draft.length > 5000} onClick={() => postReaction(sectionId, "COMMENT", draft.trim())} className="px-2 py-1 text-xs font-semibold rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">{isPostingComment ? "Saving..." : "Post"}</button>
+																		</div>
+																	</div>
+																)}
+															</div>
+														</details>
+													)}
+													<AttachmentPanel entityId={issue.id} entityType="issue" isGM={isGM} />
+												</div>
 											</div>
+											{index < arr.length - 1 && <div className="border-b border-gray-200"></div>}
 										</div>
-										{index < filteredIssueList.length - 1 && <div className="border-b border-gray-200"></div>}
-									</div>
-								);
-							})}
+									);
+								})}
+							</div>
+							{activeCardIssues.length > 5 && (
+								<button
+									onClick={() => setShowMoreActiveIssues(v => !v)}
+									className="mt-3 w-full py-2 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors"
+								>
+									{showMoreActiveIssues ? "▲ Show less" : `▼ Show ${activeCardIssues.length - 5} more open / in-progress`}
+								</button>
+							)}
+						</>
+					)}
+
+					{/* ── Resolved Issues (collapsible) ─────────────────────── */}
+					{resolvedCardIssues.length > 0 && (
+						<div className="mt-4 border-t border-gray-200 pt-3">
+							<button
+								onClick={() => setShowResolvedIssues(v => !v)}
+								className="flex items-center gap-2 text-sm font-semibold text-green-700 hover:text-green-900 w-full text-left"
+							>
+								<span className={`transition-transform inline-block text-xs ${showResolvedIssues ? "rotate-90" : ""}`}>▶</span>
+								Resolved ({resolvedCardIssues.length}){issuesCardYear !== "ALL" ? ` — ${issuesCardYear}` : ""}
+							</button>
+							{showResolvedIssues && (
+								<div className="mt-2 space-y-0 max-h-[280px] overflow-y-auto">
+									{resolvedCardIssues.map((issue, index) => {
+										const ageDays = (() => { const d = daysBetween(issue.createdAt, issue.resolvedAt); return d == null ? "—" : `${d}d`; })();
+										const title = issue.issue || issue.title || "Untitled issue";
+										return (
+											<div key={issue.id}>
+												<div className="flex items-start gap-3 py-2.5">
+													<span className="flex-shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-800 uppercase tracking-wide mt-0.5">Done</span>
+													<div className="flex-1 min-w-0">
+														<p className="text-sm font-medium text-gray-500 truncate line-through decoration-gray-300" title={title}>{title}</p>
+														<p className="text-[11px] text-gray-400 mt-0.5">
+															{issue.inCharge || "Unassigned"}
+															{issue.year && issuesCardYear === "ALL" && <span className="ml-1">· {issue.year}</span>}
+															{" · "}Resolved after {ageDays}
+															{issue.resolvedAt && <span className="ml-1">· {new Date(issue.resolvedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" })}</span>}
+														</p>
+													</div>
+												</div>
+												{index < resolvedCardIssues.length - 1 && <div className="border-b border-gray-100"></div>}
+											</div>
+										);
+									})}
+								</div>
+							)}
 						</div>
 					)}
 				</div>
 
 					<div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-						<div className="flex items-center justify-between gap-3 mb-4">
-							<div className="flex items-center gap-2">
-								<SparklesIcon className="w-5 h-5 text-purple-600" />
-								<h3 className="text-lg font-semibold text-gray-900">GM Projects</h3>
-							</div>
-							<div className="flex items-center gap-2">
-								<label className="text-sm text-gray-700">Status</label>
-								<select
-									value={projectStatusFilter}
-									onChange={(e) => setProjectStatusFilter(e.target.value as typeof projectStatusFilter)}
-									className="border rounded-lg px-3 py-2 text-sm font-bold text-gray-900 bg-white focus:ring-2 focus:ring-blue-500"
-								>
-									<option value="ALL">All</option>
-										<option value="ACTIVE">Active</option>
-									<option value="COMPLETED">Completed</option>
-								</select>
-							</div>
+					{/* ── GM Projects Header ────────────────────────────────── */}
+					<div className="flex items-center justify-between gap-3 mb-4">
+						<div className="flex items-center gap-2">
+							<SparklesIcon className="w-5 h-5 text-purple-600" />
+							<h3 className="text-lg font-semibold text-gray-900">GM Projects</h3>
 						</div>
-						{filteredProjects.length > 0 ? (
-							<div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
-								{filteredProjects.map((project) => {
-									const progressColor = 
-										project.progress >= 80
-											? "from-green-500 to-green-600"
-											: project.progress >= 60
-												? "from-blue-500 to-blue-600"
-												: project.progress >= 40
-													? "from-yellow-500 to-yellow-600"
-													: "from-red-500 to-red-600";
-									
+						<div className="flex items-center gap-2 text-xs font-semibold">
+							<span className="px-2 py-1 rounded-full bg-purple-100 text-purple-800">Active {activeProjects.length}</span>
+							<span className="px-2 py-1 rounded-full bg-green-100 text-green-800">Done {completedProjects.length}</span>
+						</div>
+					</div>
+
+					{/* ── Active Projects ───────────────────────────────────── */}
+					{activeProjects.length === 0 ? (
+						<div className="text-center py-8">
+							<SparklesIcon className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+							<p className="text-gray-500 text-sm">No active projects</p>
+						</div>
+					) : (
+						<>
+							<div className="space-y-3 max-h-[320px] overflow-y-auto pr-1">
+								{(showMoreActiveProjects ? activeProjects : activeProjects.slice(0, 5)).map((project) => {
+									const progressColor =
+										project.progress >= 80 ? "from-green-500 to-green-600"
+										: project.progress >= 60 ? "from-blue-500 to-blue-600"
+										: project.progress >= 40 ? "from-yellow-500 to-yellow-600"
+										: "from-red-500 to-red-600";
 									const isGM = userRole === "GM";
 									const isTrustee = userRole === "TRUSTEE";
 									const sectionId = `project-${project.id}`;
@@ -3095,26 +3766,14 @@ export default function Dashboard() {
 									const isPostingUp = postingReaction[`${sectionId}-THUMBS_UP`] || false;
 									const isPostingDown = postingReaction[`${sectionId}-THUMBS_DOWN`] || false;
 									const isPostingComment = postingReaction[`${sectionId}-COMMENT`] || false;
-									
+
 									return (
-										<div 
-											key={project.id} 
-											className="group relative bg-gradient-to-br from-white to-gray-50 border border-gray-200 rounded-xl p-4 hover:shadow-md hover:border-blue-300 transition-all duration-200"
-										>
-											{/* Header: Title left, Manager right */}
+										<div key={project.id} className="group relative bg-gradient-to-br from-white to-gray-50 border border-gray-200 rounded-xl p-4 hover:shadow-md hover:border-blue-300 transition-all duration-200">
 											<div className="flex items-start justify-between mb-3">
 												<div className="flex-1">
-													<h4 className="font-bold text-gray-900 text-base leading-tight">
-														{project.projectName}
-													</h4>
+													<h4 className="font-bold text-gray-900 text-base leading-tight">{project.projectName}</h4>
 													{project.status && (
-														<span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${
-															project.status === "COMPLETED"
-																? "bg-green-100 text-green-700"
-															: project.status === "IN_PROGRESS"
-																? "bg-blue-100 text-blue-700"
-																: "bg-gray-100 text-gray-600"
-														}`}>
+														<span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${project.status === "COMPLETED" ? "bg-green-100 text-green-700" : project.status === "IN_PROGRESS" ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600"}`}>
 															{project.status.replace(/_/g, " ")}
 														</span>
 													)}
@@ -3124,141 +3783,104 @@ export default function Dashboard() {
 													<p className="text-sm font-bold text-gray-900 mt-0.5">{project.projectManager}</p>
 												</div>
 											</div>
-
-											{/* Progress Bar with embedded percentage */}
 											<div className="relative mb-3">
 												<div className="flex items-center justify-between mb-1.5">
 													<span className="text-xs font-semibold text-gray-600">Progress</span>
-													<span className={`text-sm font-bold ${
-														project.progress >= 80 ? "text-green-600" : 
-														project.progress >= 60 ? "text-blue-600" : 
-														project.progress >= 40 ? "text-yellow-600" : "text-red-600"
-													}`}>
-														{project.progress}%
-													</span>
-													{isGM && savingProjectIds.has(project.id) && (
-														<span className="text-[10px] font-semibold text-blue-600">Saving...</span>
-													)}
+													<span className={`text-sm font-bold ${project.progress >= 80 ? "text-green-600" : project.progress >= 60 ? "text-blue-600" : project.progress >= 40 ? "text-yellow-600" : "text-red-600"}`}>{project.progress}%</span>
+													{isGM && savingProjectIds.has(project.id) && <span className="text-[10px] font-semibold text-blue-600">Saving...</span>}
 												</div>
 												<div className="relative w-full bg-gray-200 rounded-full h-3 overflow-hidden shadow-inner">
-													<div
-														className={`absolute inset-y-0 left-0 bg-gradient-to-r ${progressColor} rounded-full transition-all duration-500 ease-out shadow-sm`}
-														style={{ width: `${project.progress}%` }}
-													>
+													<div className={`absolute inset-y-0 left-0 bg-gradient-to-r ${progressColor} rounded-full transition-all duration-500 ease-out shadow-sm`} style={{ width: `${project.progress}%` }}>
 														<div className="absolute inset-0 bg-white/20 animate-pulse"></div>
 													</div>
 												</div>
 											</div>
-
 											{isGM && (
 												<div className="mt-3">
 													<div className="flex items-center gap-3">
-														<input
-															type="range"
-															min={0}
-															max={100}
-															value={project.progress}
-															onChange={(e) => handleProjectProgressUpdate(project.id, Number(e.target.value))}
-															className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-															disabled={savingProjectIds.has(project.id)}
-														/>
-														<input
-															type="number"
-															min={0}
-															max={100}
-															value={project.progress}
-															onChange={(e) => handleProjectProgressUpdate(project.id, Number(e.target.value))}
-															className="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-gray-900"
-															disabled={savingProjectIds.has(project.id)}
-														/>
+														<input type="range" min={0} max={100} value={project.progress} onChange={(e) => handleProjectProgressUpdate(project.id, Number(e.target.value))} className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" disabled={savingProjectIds.has(project.id)} />
+														<input type="number" min={0} max={100} value={project.progress} onChange={(e) => handleProjectProgressUpdate(project.id, Number(e.target.value))} className="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-gray-900" disabled={savingProjectIds.has(project.id)} />
 														<span className="text-xs text-gray-500">%</span>
 													</div>
 												</div>
 											)}
-
-											{/* Trustee Reactions */}
 											{isTrustee && (
 												<div className="flex items-center gap-2 pt-2 border-t border-gray-100">
-													<button
-														disabled={isPostingUp}
-														onClick={() => postReaction(sectionId, "THUMBS_UP")}
-														className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border transition-colors bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:bg-blue-50"
-													>
-														👍 {thumbsUp}
-													</button>
-													<button
-														disabled={isPostingDown}
-														onClick={() => postReaction(sectionId, "THUMBS_DOWN")}
-														className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border transition-colors bg-white text-gray-700 border-gray-200 hover:border-red-400 hover:bg-red-50"
-													>
-														👎 {thumbsDown}
-													</button>
-													<button
-														onClick={() => {
-															const detailsEl = document.getElementById(`project-comments-${project.id}`);
-															if (detailsEl) detailsEl.toggleAttribute("open");
-														}}
-														className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border transition-colors bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:bg-blue-50"
-													>
-														💬 {comments.length}
-													</button>
+													<button disabled={isPostingUp} onClick={() => postReaction(sectionId, "THUMBS_UP")} className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border transition-colors bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:bg-blue-50">👍 {thumbsUp}</button>
+													<button disabled={isPostingDown} onClick={() => postReaction(sectionId, "THUMBS_DOWN")} className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border transition-colors bg-white text-gray-700 border-gray-200 hover:border-red-400 hover:bg-red-50">👎 {thumbsDown}</button>
+													<button onClick={() => { const el = document.getElementById(`project-comments-${project.id}`); if (el) el.toggleAttribute("open"); }} className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border transition-colors bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:bg-blue-50">💬 {comments.length}</button>
 												</div>
 											)}
-
-											{/* GM View */}
 											{isGM && sectionReactions.length > 0 && (
 												<div className="pt-2 border-t border-gray-100">
 													<span className="text-xs text-gray-600">👍 {thumbsUp} 👎 {thumbsDown} 💬 {comments.length}</span>
 												</div>
 											)}
-
-											{/* Comments Section */}
 											{(isTrustee || isGM) && (
 												<details id={`project-comments-${project.id}`} className="mt-2">
-													<summary className="text-xs text-blue-600 cursor-pointer hover:underline">
-														{comments.length > 0 ? `View ${comments.length} comment(s)` : "Add comment"}
-													</summary>
+													<summary className="text-xs text-blue-600 cursor-pointer hover:underline">{comments.length > 0 ? `View ${comments.length} comment(s)` : "Add comment"}</summary>
 													<div className="mt-2 space-y-2">
 														{comments.map((c) => (
 															<div key={c.id} className="p-2 rounded bg-gray-50 border border-gray-200">
 																<p className="text-xs text-gray-800">{c.comment}</p>
-																<p className="mt-1 text-[10px] text-gray-500">
-																	{c.user?.name || "User"} • {new Date(c.createdAt).toLocaleString()}
-																</p>
+																<p className="mt-1 text-[10px] text-gray-500">{c.user?.name || "User"} • {new Date(c.createdAt).toLocaleString()}</p>
 															</div>
 														))}
 														{isTrustee && (
-															<div className="flex gap-2">
-																<input
-																	value={draft}
-																	onChange={(e) => setCommentDrafts(prev => ({ ...prev, [sectionId]: e.target.value }))}
-																	placeholder="Add a comment"
-																	className="flex-1 px-2 py-1 text-xs text-gray-900 border rounded"
-																/>
-																<button
-																	disabled={!draft.trim() || isPostingComment}
-																	onClick={() => postReaction(sectionId, "COMMENT", draft.trim())}
-																	className="px-2 py-1 text-xs font-semibold rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-																>
-																	Post
-																</button>
+															<div className="space-y-2">
+																<textarea value={draft} onChange={(e) => setCommentDrafts(prev => ({ ...prev, [sectionId]: e.target.value }))} placeholder="Add a comment" rows={2} className="w-full px-2 py-1.5 text-xs text-gray-900 border rounded resize-none" />
+																<div className="flex items-center justify-between">
+																	<span className="text-[10px] text-gray-500">{draft.length}/5000</span>
+																	<button disabled={!draft.trim() || isPostingComment || draft.length > 5000} onClick={() => postReaction(sectionId, "COMMENT", draft.trim())} className="px-2 py-1 text-xs font-semibold rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">{isPostingComment ? "Saving..." : "Post"}</button>
+																</div>
 															</div>
 														)}
 													</div>
 												</details>
 											)}
+										<AttachmentPanel entityId={project.id} entityType="project" isGM={isGM} />
 										</div>
 									);
 								})}
 							</div>
-						) : (
-							<div className="text-center py-12">
-								<SparklesIcon className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-								<p className="text-gray-500 font-medium">No projects match the filter</p>
-							</div>
-						)}
-					</div>
+							{activeProjects.length > 5 && (
+								<button
+									onClick={() => setShowMoreActiveProjects(v => !v)}
+									className="mt-3 w-full py-2 text-xs font-semibold text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-lg border border-purple-200 transition-colors"
+								>
+									{showMoreActiveProjects ? "▲ Show less" : `▼ Show ${activeProjects.length - 5} more active projects`}
+								</button>
+							)}
+						</>
+					)}
+
+					{/* ── Completed Projects (collapsible) ─────────────────── */}
+					{completedProjects.length > 0 && (
+						<div className="mt-4 border-t border-gray-200 pt-3">
+							<button
+								onClick={() => setShowCompletedProjects(v => !v)}
+								className="flex items-center gap-2 text-sm font-semibold text-green-700 hover:text-green-900 w-full text-left"
+							>
+								<span className={`transition-transform inline-block text-xs ${showCompletedProjects ? "rotate-90" : ""}`}>▶</span>
+								Completed Projects ({completedProjects.length})
+							</button>
+							{showCompletedProjects && (
+								<div className="mt-2 space-y-2 max-h-[280px] overflow-y-auto">
+									{completedProjects.map((project) => (
+										<div key={project.id} className="flex items-center gap-3 p-3 bg-green-50 border border-green-100 rounded-lg">
+											<div className="flex-1 min-w-0">
+												<p className="text-sm font-semibold text-gray-600 truncate line-through decoration-gray-400">{project.projectName}</p>
+												<p className="text-[11px] text-gray-400 mt-0.5">{project.projectManager} · 100% complete</p>
+											</div>
+											<span className="flex-shrink-0 text-xs font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">Done</span>
+										</div>
+									))}
+								</div>
+							)}
+						</div>
+					)}
 				</div>
+			</div>
 
 				<div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
 					<div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
@@ -3355,32 +3977,33 @@ export default function Dashboard() {
 					</div>
 
 					<div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+						{/* ── Upcoming Events Header ────────────────────────── */}
 						<div className="p-6 border-b border-gray-100">
-							<div className="flex items-start justify-between mb-4">
+							<div className="flex items-start justify-between mb-4 flex-wrap gap-2">
 								<div>
 									<h3 className="text-lg font-bold text-gray-900">Upcoming Events</h3>
 									<p className="text-xs text-gray-500 mt-1">Track and manage important dates</p>
 								</div>
-								<div className="flex items-center gap-2">
+								<div className="flex items-center gap-2 flex-wrap">
 									<span className="text-xs text-gray-500 bg-gray-50 px-3 py-1 rounded-full font-medium">
-										{tableEvents.length} {tableEvents.length === 1 ? 'event' : 'events'}
+										{activeCardEvents.length} active · {completedCardEvents.length} done
 									</span>
 								</div>
 							</div>
 							<div className="flex items-center gap-3 flex-wrap">
-								<div className="flex items-center gap-2">
-									<label className="text-xs font-medium text-gray-600">Status:</label>
-									<select
-										value={eventStatusFilter}
-										onChange={(e) => setEventStatusFilter(e.target.value as typeof eventStatusFilter)}
-										className="border-2 border-gray-200 rounded-lg px-3 py-1.5 text-xs font-semibold text-gray-900 bg-white hover:border-blue-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-									>
-										<option value="ALL">All Status</option>
-										<option value="ACTIVE">Active</option>
-										<option value="COMPLETED">Completed</option>
-									</select>
-								</div>
-
+								{availableEventYears.length > 0 && (
+									<div className="flex items-center gap-2">
+										<label className="text-xs font-medium text-gray-600">Year:</label>
+										<select
+											value={eventsCardYear === "ALL" ? "ALL" : String(eventsCardYear)}
+											onChange={(e) => { setEventsCardYear(e.target.value === "ALL" ? "ALL" : Number(e.target.value)); setShowMoreActiveEvents(false); setShowCompletedEvents(false); }}
+											className="border-2 border-blue-200 rounded-lg px-3 py-1.5 text-xs font-semibold text-blue-900 bg-blue-50 hover:border-blue-400 focus:ring-2 focus:ring-blue-500 transition-colors"
+										>
+											<option value="ALL">All Years</option>
+											{availableEventYears.map(y => <option key={y} value={y}>{y}</option>)}
+										</select>
+									</div>
+								)}
 								<div className="flex items-center gap-2">
 									<label className="text-xs font-medium text-gray-600">Priority:</label>
 									<select
@@ -3396,194 +4019,240 @@ export default function Dashboard() {
 							</div>
 						</div>
 
-						{tableEvents.length === 0 ? (
+						{/* ── Active Events ─────────────────────────────────── */}
+						{activeCardEvents.length === 0 ? (
 							<div className="p-12 text-center">
 								<div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 mb-4">
 									<svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+										<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 00 2-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
 									</svg>
 								</div>
-								<p className="text-sm font-medium text-gray-500">No events found</p>
+								<p className="text-sm font-medium text-gray-500">No upcoming events{eventsCardYear !== "ALL" ? ` for ${eventsCardYear}` : ""}</p>
 								<p className="text-xs text-gray-400 mt-1">Try adjusting your filters or add new events</p>
 							</div>
 						) : (
-							<div className="overflow-x-auto max-h-[580px] overflow-y-auto">
-								<table className="min-w-full">
-									<thead>
-										<tr className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
-											{userRole === "GM" && (
-												<th className="px-4 py-3 text-center" style={{width: "50px"}}>
-													<span className="text-xs font-bold text-gray-600">✓</span>
-												</th>
-											)}
-											<th className="px-4 py-3 text-left">
-												<span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Date</span>
-											</th>
-											<th className="px-4 py-3 text-left">
-												<span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Activity</span>
-											</th>
-											<th className="px-4 py-3 text-left">
-												<span className="text-xs font-bold text-gray-700 uppercase tracking-wide">In-Charge</span>
-											</th>
-											<th className="px-4 py-3 text-center">
-												<span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Priority</span>
-											</th>
-											<th className="px-4 py-3 text-center">
-												<span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Due</span>
-											</th>
-											<th className="px-4 py-3 text-center">
-												<span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Feedback</span>
-											</th>
-										</tr>
-									</thead>
-									<tbody className="bg-white divide-y divide-gray-100">
-										{tableEvents.map((event, index) => {
-											const priority = event.rate || event.priority || "Low";
-											const daysUntilEvent = daysUntil(event.date);
-											const isCompleted = completedEventIds.has(event.id);
-											const countdownBadge = 
-												daysUntilEvent < 0 ? `${Math.abs(daysUntilEvent)}d ago` :
-												daysUntilEvent === 0 ? "Today" :
-												`${daysUntilEvent}d`;
-											const urgencyColor = getUrgencyColor(daysUntilEvent, isCompleted);
-											
-											const isGM = userRole === "GM";
-											const isTrustee = userRole === "TRUSTEE";
-											const sectionId = `event-${event.id}`;
-											const sectionReactions = reactions.filter(r => r.sectionId === sectionId);
-											const thumbsUp = sectionReactions.filter(r => r.type === "THUMBS_UP").length;
-											const thumbsDown = sectionReactions.filter(r => r.type === "THUMBS_DOWN").length;
-											const comments = sectionReactions.filter(r => r.type === "COMMENT");
-											const draft = commentDrafts[sectionId] || "";
-											const isPostingUp = postingReaction[`${sectionId}-THUMBS_UP`] || false;
-											const isPostingDown = postingReaction[`${sectionId}-THUMBS_DOWN`] || false;
-											const isPostingComment = postingReaction[`${sectionId}-COMMENT`] || false;
-											
-											return (
-												<>
-													<tr 
-														key={event.id} 
-														className={`hover:bg-blue-50/50 transition-colors ${isCompleted ? "bg-gray-50/50" : index % 2 === 0 ? "bg-white" : "bg-gray-50/30"}`}
-													>
-														{userRole === "GM" && (
-															<td className="px-4 py-3.5 text-center">
-																<input
-																	type="checkbox"
-																	checked={isCompleted}
-																	onChange={() => handleToggleEventCompletion(event.id)}
-																	className="w-4 h-4 cursor-pointer rounded border-2 border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0"
-																/>
-															</td>
+							<div className="p-4">
+								<div className="space-y-0 max-h-[280px] overflow-y-auto pr-1">
+									{(showMoreActiveEvents ? activeCardEvents : activeCardEvents.slice(0, 5)).map((event, index, arr) => {
+										const priority = event.rate || event.priority || "Low";
+										const daysUntilEvent = daysUntil(event.date);
+										const isCompleted = completedEventIds.has(event.id);
+										const countdownBadge = daysUntilEvent < 0 ? `${Math.abs(daysUntilEvent)}d ago` : daysUntilEvent === 0 ? "Today" : `${daysUntilEvent}d`;
+										const urgencyColor = getUrgencyColor(daysUntilEvent, isCompleted);
+										const statusClasses = "bg-blue-100 text-blue-800";
+										const isGM = userRole === "GM";
+										const isTrustee = userRole === "TRUSTEE";
+										const sectionId = `event-${event.id}`;
+										const sectionReactions = reactions.filter(r => r.sectionId === sectionId);
+										const thumbsUp = sectionReactions.filter(r => r.type === "THUMBS_UP").length;
+										const thumbsDown = sectionReactions.filter(r => r.type === "THUMBS_DOWN").length;
+										const comments = sectionReactions.filter(r => r.type === "COMMENT");
+										const draft = commentDrafts[sectionId] || "";
+										const isPostingUp = postingReaction[`${sectionId}-THUMBS_UP`] || false;
+										const isPostingDown = postingReaction[`${sectionId}-THUMBS_DOWN`] || false;
+										const isPostingComment = postingReaction[`${sectionId}-COMMENT`] || false;
+
+										return (
+											<div key={event.id}>
+												<div className="flex items-start gap-3 py-3">
+													<div className="flex items-start gap-2 flex-shrink-0">
+														<span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusClasses}`}>
+															ACTIVE
+														</span>
+														{isGM && (
+															<label className="inline-flex items-center gap-1 text-xs font-semibold text-gray-700 bg-gray-100 px-2 py-1 rounded-full cursor-pointer">
+																<input type="checkbox" checked={isCompleted} onChange={() => handleToggleEventCompletion(event.id)} className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+																Done
+															</label>
 														)}
-														<td className={`px-4 py-3.5 ${isCompleted ? "line-through text-gray-400" : "text-gray-900"}`}>
-															<span className="text-xs font-semibold">{new Date(event.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-														</td>
-														<td className={`px-4 py-3.5 ${isCompleted ? "line-through text-gray-400" : "text-gray-900"}`}>
-															<span className="text-sm font-medium">{event.activity}</span>
-														</td>
-														<td className={`px-4 py-3.5 ${isCompleted ? "line-through text-gray-400" : "text-gray-700"}`}>
-															<span className="text-xs">{event.inCharge}</span>
-														</td>
-														<td className="px-4 py-3.5 text-center">
-															<span
-																className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${
-																	priority === "High"
-																		? "bg-red-100 text-red-700 ring-1 ring-red-200"
-																		: priority === "Medium"
-																			? "bg-amber-100 text-amber-700 ring-1 ring-amber-200"
-																			: "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200"
-																} ${isCompleted ? "opacity-40" : ""}`}
-															>
-																{priority}
+													</div>
+													<div className="flex-1 min-w-0">
+														<p className="font-bold text-sm leading-5 truncate text-gray-900" title={event.activity}>{event.activity}</p>
+														<p className="text-xs mt-1 text-gray-600">{event.inCharge || "Unassigned"}</p>
+														<div className="flex flex-wrap items-center gap-2 mt-2">
+															<span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${priority === "High" ? "bg-red-100 text-red-700" : priority === "Medium" ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>{priority}</span>
+															<span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${urgencyColor}`}>{countdownBadge}</span>
+															<span className="text-[11px] text-gray-500">
+																{new Date(event.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+																{event.year && eventsCardYear === "ALL" && <span className="ml-1 text-gray-400">({event.year})</span>}
 															</span>
-														</td>
-														<td className="px-4 py-3.5 text-center">
-															<span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${urgencyColor} ${isCompleted ? "" : "ring-1"} ${
-																daysUntilEvent < 0 && !isCompleted ? "ring-red-200 animate-pulse" : 
-																daysUntilEvent === 0 && !isCompleted ? "ring-amber-200" : 
-																!isCompleted ? "ring-gray-200" : ""
-															}`}>
-																{countdownBadge}
-															</span>
-														</td>
-														<td className="px-4 py-3.5 text-center">
-															{isTrustee && (
-																<div className="flex items-center justify-center gap-1">
-																	<button
-																		disabled={isPostingUp}
-																		onClick={() => postReaction(sectionId, "THUMBS_UP")}
-																		className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border transition-colors bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:bg-blue-50"
-																	>
-																		👍 {thumbsUp}
-																	</button>
-																	<button
-																		disabled={isPostingDown}
-																		onClick={() => postReaction(sectionId, "THUMBS_DOWN")}
-																		className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border transition-colors bg-white text-gray-700 border-gray-200 hover:border-red-400 hover:bg-red-50"
-																	>
-																		👎 {thumbsDown}
-																	</button>
-																	<button
-																		onClick={() => {
-																			const detailsEl = document.getElementById(`event-comments-${event.id}`);
-																			if (detailsEl) detailsEl.toggleAttribute("open");
-																		}}
-																		className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border transition-colors bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:bg-blue-50"
-																	>
-																		💬 {comments.length}
-																	</button>
+														</div>
+														{(isTrustee || isGM) && (
+															<details id={`event-comments-${event.id}`} className="mt-2">
+																<summary className="text-xs text-blue-600 cursor-pointer hover:underline">{comments.length > 0 ? `View ${comments.length} comment(s)` : "Add comment"}</summary>
+																<div className="mt-2 space-y-2">
+																	{comments.map((c) => (
+																		<div key={c.id} className="p-2 rounded bg-gray-50 border border-gray-200">
+																			<p className="text-xs text-gray-800">{c.comment}</p>
+																			<p className="mt-1 text-[10px] text-gray-500">{c.user?.name || "User"} • {new Date(c.createdAt).toLocaleString()}</p>
+																		</div>
+																	))}
+																	{isTrustee && (
+																		<div className="space-y-2">
+																			<textarea value={draft} onChange={(e) => setCommentDrafts(prev => ({ ...prev, [sectionId]: e.target.value }))} placeholder="Add a comment" rows={2} className="w-full px-2 py-1.5 text-xs text-gray-900 border rounded resize-none" />
+																			<div className="flex items-center justify-between">
+																				<span className="text-[10px] text-gray-500">{draft.length}/5000</span>
+																				<button disabled={!draft.trim() || isPostingComment || draft.length > 5000} onClick={() => postReaction(sectionId, "COMMENT", draft.trim())} className="px-2 py-1 text-xs font-semibold rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">{isPostingComment ? "Saving..." : "Post"}</button>
+																			</div>
+																		</div>
+																	)}
 																</div>
-															)}
-															{isGM && (
-																<span className="text-xs text-gray-600">
-																	{sectionReactions.length > 0 ? `👍 ${thumbsUp} 👎 ${thumbsDown} 💬 ${comments.length}` : "—"}
-																</span>
-															)}
-														</td>
-													</tr>
-													{(isTrustee || isGM) && (
-														<tr key={`${event.id}-comments`} className="bg-gray-50/30">
-															<td colSpan={userRole === "GM" ? 7 : 6} className="px-4 py-2">
-																<details id={`event-comments-${event.id}`} className="text-xs">
-																	<summary className="text-blue-600 cursor-pointer hover:underline font-medium">
-																		{comments.length > 0 ? `View ${comments.length} comment(s)` : "Add comment"}
-																	</summary>
-																	<div className="mt-2 space-y-2">
-																		{comments.map((c) => (
-																			<div key={c.id} className="p-2 rounded bg-white border border-gray-200">
-																				<p className="text-xs text-gray-800">{c.comment}</p>
-																				<p className="mt-1 text-[10px] text-gray-500">
-																					{c.user?.name || "User"} • {new Date(c.createdAt).toLocaleString()}
-																				</p>
-																			</div>
-																		))}
-																		{isTrustee && (
-																			<div className="flex gap-2">
-																				<input
-																					value={draft}
-																					onChange={(e) => setCommentDrafts(prev => ({ ...prev, [sectionId]: e.target.value }))}
-																					placeholder="Add a comment"
-																					className="flex-1 px-2 py-1 text-xs text-gray-900 border rounded"
-																				/>
-																				<button
-																					disabled={!draft.trim() || isPostingComment}
-																					onClick={() => postReaction(sectionId, "COMMENT", draft.trim())}
-																					className="px-2 py-1 text-xs font-semibold rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-																				>
-																					Post
-																				</button>
-																			</div>
-																		)}
-																	</div>
-																</details>
-															</td>
-														</tr>
-													)}
-												</>
+															</details>
+														)}
+														{isTrustee && (
+															<div className="flex items-center gap-2 mt-3 pt-2 border-t border-gray-100">
+																<button disabled={isPostingUp} onClick={() => postReaction(sectionId, "THUMBS_UP")} className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border transition-colors bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:bg-blue-50">👍 {thumbsUp}</button>
+																<button disabled={isPostingDown} onClick={() => postReaction(sectionId, "THUMBS_DOWN")} className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border transition-colors bg-white text-gray-700 border-gray-200 hover:border-red-400 hover:bg-red-50">👎 {thumbsDown}</button>
+																<button onClick={() => { const el = document.getElementById(`event-comments-${event.id}`); if (el) el.toggleAttribute("open"); }} className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border transition-colors bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:bg-blue-50">💬 {comments.length}</button>
+															</div>
+														)}
+														{isGM && sectionReactions.length > 0 && (
+															<div className="mt-3 pt-2 border-t border-gray-100 text-xs text-gray-600">👍 {thumbsUp} 👎 {thumbsDown} 💬 {comments.length}</div>
+														)}
+														<AttachmentPanel entityId={event.id} entityType="event" isGM={isGM} />
+													</div>
+												</div>
+												{index < arr.length - 1 && <div className="border-b border-gray-200"></div>}
+											</div>
+										);
+									})}
+								</div>
+								{activeCardEvents.length > 5 && (
+									<button
+										onClick={() => setShowMoreActiveEvents(v => !v)}
+										className="mt-3 w-full py-2 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors"
+									>
+										{showMoreActiveEvents ? "▲ Show less" : `▼ Show ${activeCardEvents.length - 5} more upcoming events`}
+									</button>
+								)}
+							</div>
+						)}
+
+						{/* ── Completed Events (collapsible) ────────────────── */}
+						{completedCardEvents.length > 0 && (
+							<div className="border-t border-gray-200 px-6 py-3">
+								<button
+									onClick={() => setShowCompletedEvents(v => !v)}
+									className="flex items-center gap-2 text-sm font-semibold text-green-700 hover:text-green-900 w-full text-left"
+								>
+									<span className={`transition-transform inline-block text-xs ${showCompletedEvents ? "rotate-90" : ""}`}>▶</span>
+									Completed Events ({completedCardEvents.length}){eventsCardYear !== "ALL" ? ` — ${eventsCardYear}` : ""}
+								</button>
+								{showCompletedEvents && (
+									<div className="mt-2 space-y-1 max-h-[280px] overflow-y-auto">
+										{completedCardEvents.map((event, index) => {
+											const priority = event.rate || event.priority || "Low";
+											return (
+												<div key={event.id}>
+													<div className="flex items-start gap-3 py-2.5">
+														<span className="flex-shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-800 uppercase tracking-wide mt-0.5">Done</span>
+														<div className="flex-1 min-w-0">
+															<p className="text-sm font-medium text-gray-500 truncate line-through decoration-gray-300" title={event.activity}>{event.activity}</p>
+															<p className="text-[11px] text-gray-400 mt-0.5">
+																{event.inCharge || "Unassigned"} · {priority}
+																{event.year && eventsCardYear === "ALL" && <span className="ml-1">· {event.year}</span>}
+																{" · "}{new Date(event.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" })}
+															</p>
+														</div>
+													</div>
+													{index < completedCardEvents.length - 1 && <div className="border-b border-gray-100"></div>}
+												</div>
 											);
 										})}
-									</tbody>
-								</table>
+									</div>
+								)}
+							</div>
+						)}
+					</div>
+				</div>
+
+				<div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-8">
+					<div className="flex items-center justify-between mb-4">
+						<div>
+							<h3 className="text-lg font-semibold text-gray-900">Events Calendar</h3>
+							<p className="text-xs text-gray-500 mt-1">Monthly view with marked upcoming events</p>
+						</div>
+						<div className="flex items-center gap-2">
+							<button
+								onClick={() => setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+								className="px-3 py-1.5 text-xs font-semibold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+							>
+								Previous
+							</button>
+							<span className="text-sm font-semibold text-gray-900 min-w-[160px] text-center">
+								{calendarMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+							</span>
+							<button
+								onClick={() => setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+								className="px-3 py-1.5 text-xs font-semibold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+							>
+								Next
+							</button>
+						</div>
+					</div>
+
+					<div className="grid grid-cols-7 gap-1 mb-2">
+						{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
+							<div key={day} className="text-center text-xs font-semibold text-gray-600 py-2">
+								{day}
+							</div>
+						))}
+					</div>
+
+					<div className="grid grid-cols-7 gap-1">
+						{calendarCells.map((cell) => {
+							const key = toLocalDateKey(cell.date);
+							const eventInfo = calendarEventMap.get(key);
+							const eventCount = eventInfo?.count || 0;
+							const visibleLabels = eventInfo?.labels.slice(0, 2) || [];
+							const remainingCount = Math.max(0, eventCount - visibleLabels.length);
+							const isToday = toLocalDateKey(new Date()) === key;
+
+							return (
+								<div
+									key={key}
+									title={eventInfo ? eventInfo.labels.slice(0, 3).join(" • ") : ""}
+									className={`min-h-[84px] p-1.5 border rounded-md transition-colors ${
+										cell.inCurrentMonth ? "bg-white border-gray-200" : "bg-gray-50 border-gray-100"
+									} ${isToday ? "ring-2 ring-blue-400" : ""}`}
+								>
+									<div className={`text-xs font-semibold ${cell.inCurrentMonth ? "text-gray-900" : "text-gray-400"}`}>
+										{cell.date.getDate()}
+									</div>
+									{eventCount > 0 && (
+										<div className="mt-1 space-y-1">
+											{visibleLabels.map((label, idx) => (
+												<p key={`${key}-${idx}`} className="text-[10px] leading-3 text-blue-700 bg-blue-50 rounded px-1 py-0.5 truncate">
+													{label}
+												</p>
+											))}
+											{remainingCount > 0 && (
+												<p className="text-[10px] leading-3 font-semibold text-gray-600">+{remainingCount} more</p>
+											)}
+										</div>
+									)}
+								</div>
+							);
+						})}
+					</div>
+
+					<div className="mt-4 pt-4 border-t border-gray-200">
+						<h4 className="text-sm font-semibold text-gray-900 mb-2">Upcoming events this month</h4>
+						{upcomingEventsForCalendar.filter(evt => evt.parsedDate.getFullYear() === calendarMonth.getFullYear() && evt.parsedDate.getMonth() === calendarMonth.getMonth()).length === 0 ? (
+							<p className="text-xs text-gray-500">No upcoming events in this month.</p>
+						) : (
+							<div className="space-y-1 max-h-28 overflow-y-auto">
+								{upcomingEventsForCalendar
+									.filter(evt => evt.parsedDate.getFullYear() === calendarMonth.getFullYear() && evt.parsedDate.getMonth() === calendarMonth.getMonth())
+									.slice(0, 8)
+									.map(evt => (
+										<div key={evt.id} className="text-xs text-gray-700 flex items-center justify-between gap-3">
+											<span className="truncate">{evt.activity}</span>
+											<span className="text-gray-500 font-medium whitespace-nowrap">
+												{evt.parsedDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+											</span>
+										</div>
+									))}
 							</div>
 						)}
 					</div>
