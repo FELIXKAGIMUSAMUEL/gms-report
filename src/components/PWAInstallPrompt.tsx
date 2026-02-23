@@ -120,7 +120,7 @@ export default function PWAInstallPrompt() {
                 <div className="mt-2 flex items-center gap-1.5 text-xs text-blue-600 font-medium">
                   <span>Tap</span>
                   <span className="inline-flex items-center justify-center w-5 h-5 bg-blue-100 rounded text-blue-700 font-bold">⬆</span>
-                  <span>then Add to Home Screen</span>
+                  <span>then 'Add to Home' Screen</span>
                 </div>
               </>
             ) : (
