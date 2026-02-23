@@ -1,15 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // 1. Ignore Grammar/Linting Errors
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  // 2. Ignore TypeScript Data Errors
-  typescript: {
-    ignoreBuildErrors: true,
-  },
 
-  // 3. Keep original Security Headers
+  //  Security Headers
   async headers() {
     return [
       {
