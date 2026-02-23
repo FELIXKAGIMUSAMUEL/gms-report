@@ -1,15 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // 1. Force Next.js to ignore grammar errors during deployment
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  // 2. Force Next.js to ignore TypeScript type errors
-  typescript: {
-    ignoreBuildErrors: true,
-  },
 
-  // 3. Keep Mustafa's original security headers
+  // Security headers 
   async headers() {
     return [
       {
@@ -41,7 +33,7 @@ const nextConfig = {
           },
           {
             key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(), geolocation=()'
+            value: 'camera=(), microphone=()'
           },
         ],
       },
