@@ -18,7 +18,7 @@ const FilterContext = createContext<FilterContextType | null>(null);
 
 export const useFilters = () => {
   const context = useContext(FilterContext);
-  if (!context) throw new Error(&apos;useFilters must be used within FilterProvider&apos;);
+  if (!context) throw new Error("useFilters must be used within FilterProvider");
   return context;
 };
 import {
